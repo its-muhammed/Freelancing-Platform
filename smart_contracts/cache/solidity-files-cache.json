@@ -1,0 +1,40 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "D:\\IIT\\FInal Year Modules\\Computer Science Final Project\\Projects\\Freelancing-Platform\\smart_contracts\\contracts\\FreeWorkEscrow.sol": {
+      "lastModificationDate": 1738548078424,
+      "contentHash": "3d73810d477ec4874eff266544189ec1",
+      "sourceName": "contracts/FreeWorkEscrow.sol",
+      "solcConfig": {
+        "version": "0.8.0",
+        "settings": {
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "FreeWorkEscrow"
+      ]
+    }
+  }
+}
