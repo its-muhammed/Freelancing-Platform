@@ -3,10 +3,12 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 require("dotenv").config();
 
+
 const connectDB = require("./config/db");
 const userRoutes = require("./routes/userRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const bidRoutes = require("./routes/bidRoutes");
+const profileRoutes = require("./routes/profiles");
 
 
 const app = express();
@@ -18,6 +20,13 @@ app.use(express.json()); // This must be included to parse JSON requests
 app.use("/api/users", userRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/bids", bidRoutes);
+app.use("/api", profileRoutes);
+
+// MongoDB Connection
+mongoose
+  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
 
 
 
