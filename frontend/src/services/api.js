@@ -9,11 +9,14 @@ const API = axios.create({
 
 export const registerUser = async (userData) => {
     try {
-        const response = await API.post("/api/users/register", userData);
-        return response.data;
+      const response = await axios.post("http://localhost:5000/api/users/register", userData);
+      return response.data;
     } catch (error) {
-        throw error.response ? error.response.data : { message: "Signup failed" };
+      throw new Error(error.response?.data?.message || "Registration failed");
     }
-};
+  };
 
 export default API;
+
+
+

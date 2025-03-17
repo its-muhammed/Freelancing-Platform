@@ -1,8 +1,10 @@
 import { useState, useEffect, useContext } from "react";
 import axios from "axios";
-//import { useNavigate } from "react-router-dom";
 import { Web3Context } from "../context/Web3Context";
 import Layout from "../components/Layout";
+import { ethers } from "ethers";
+import { freelanceJobABI } from "../contracts/FreelanceJobABI.js";
+import freelanceJobBytecode from "../contracts/FreelanceJobBytecode.js";
 
 export default function ManageBids() {
   const web3Context = useContext(Web3Context);
@@ -12,39 +14,44 @@ export default function ManageBids() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedBid, setSelectedBid] = useState(null);
-  //const navigate = useNavigate();
+  const [tasks, setTasks] = useState([]);
+  const [viewingWork, setViewingWork] = useState(null);
 
-  // Function to fetch bids
+  console.log("Current account:", account);
+
   useEffect(() => {
-    async function fetchBids() {
+    async function fetchBidsAndTasks() {
       if (!account) {
-        console.log("No account connected yet");
         setError("Please connect your wallet to view bids.");
         return;
       }
       setIsLoading(true);
       setError(null);
       try {
-        console.log(`Fetching bids for client: ${account}`);
-        const response = await axios.get(`http://localhost:5000/api/bids/client/${account}`);
-        console.log("API response:", response.data);
-        setBids(Array.isArray(response.data) ? response.data : []);
+        const [bidsResponse, tasksResponse] = await Promise.all([
+          axios.get(`http://localhost:5000/api/bids/client/${account}`),
+          axios.get(`http://localhost:5000/api/tasks/client/${account}`),
+        ]);
+        console.log("Fetched bids:", bidsResponse.data);
+        console.log("Fetched tasks:", tasksResponse.data);
+        setBids(Array.isArray(bidsResponse.data) ? bidsResponse.data : []);
+        setTasks(Array.isArray(tasksResponse.data) ? tasksResponse.data : []);
       } catch (error) {
-        console.error("Error fetching bids:", error.message);
-        setError("Failed to fetch bids: " + error.message);
+        console.error("Error fetching bids or tasks:", error.message);
+        setError("Failed to fetch bids or tasks: " + error.message);
         setBids([]);
+        setTasks([]);
       } finally {
         setIsLoading(false);
       }
     }
-    fetchBids();
+    fetchBidsAndTasks();
   }, [account]);
 
   const handleConnectWallet = async () => {
     if (window.ethereum) {
       try {
         await window.ethereum.request({ method: "eth_requestAccounts" });
-        console.log("Wallet connection requested");
       } catch (error) {
         console.error("Error connecting wallet:", error);
         setError("Failed to connect wallet: " + error.message);
@@ -55,97 +62,153 @@ export default function ManageBids() {
   };
 
   const handleBidAccept = async (bidId, freelancer, amount) => {
-    if (!bidId) {
-      console.error("Invalid bidId:", bidId);
-      alert("Error: Bid ID missing");
+    if (!bidId || !provider) {
+      console.error("Invalid bidId or provider:", bidId, provider);
+      alert("Error: Bid ID or wallet connection missing");
       return;
     }
 
-    setLoadingStates(prev => ({ ...prev, [bidId]: true }));
+    setLoadingStates((prev) => ({ ...prev, [bidId]: true }));
     try {
       console.log(`Accepting bid ${bidId} for freelancer ${freelancer} with amount ${amount} LKR`);
-      const response = await axios.post("http://localhost:5000/api/bids/update", {
+
+      const bid = bids.find((b) => b._id === bidId);
+      let task;
+      if (bid.taskId && typeof bid.taskId === "object" && bid.taskId._id) {
+        task = bid.taskId;
+      } else {
+        task = tasks.find((t) => t._id === bid.taskId);
+      }
+      if (!task) throw new Error("Task not found for this bid");
+
+      const response = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=matic-network&vs_currencies=lkr");
+      const lkrPerPol = response.data["matic-network"].lkr || 200;
+      const polAmount = ethers.parseEther((amount / lkrPerPol).toFixed(18));
+
+      const signer = await provider.getSigner();
+      const factory = new ethers.ContractFactory(freelanceJobABI, freelanceJobBytecode, signer);
+      const dueDate = Math.floor(new Date(task.deadline).getTime() / 1000);
+      const contract = await factory.deploy(freelancer, dueDate, { value: polAmount });
+      await contract.waitForDeployment();
+      const contractAddress = await contract.getAddress();
+
+      const updateResponse = await axios.post("http://localhost:5000/api/bids/update", {
         bidId,
         status: "Contract Sent",
+        contractAddress,
       });
+      console.log("Bid update response:", updateResponse.data);
 
-      const updatedBid = response.data;
-      console.log(`Bid ${bidId} updated:`, updatedBid);
+      const updatedBidsResponse = await axios.get(`http://localhost:5000/api/bids/client/${account}`);
+      console.log("Refreshed bids after accept:", updatedBidsResponse.data);
+      setBids(Array.isArray(updatedBidsResponse.data) ? updatedBidsResponse.data : []);
 
-      setBids(bids.map(bid => (bid._id === bidId ? updatedBid : bid)));
-      const updatedBids = await axios.get(`http://localhost:5000/api/bids/client/${account}`);
-      setBids(updatedBids.data);
+      alert("Contract sent successfully!");
     } catch (error) {
       console.error("Error accepting bid:", error);
-      alert("Failed to accept bid: " + (error.response?.data?.message || error.message));
+      alert("Failed to accept bid: " + (error.reason || error.message));
     } finally {
-      setLoadingStates(prev => ({ ...prev, [bidId]: false }));
+      setLoadingStates((prev) => ({ ...prev, [bidId]: false }));
       setSelectedBid(null);
     }
   };
 
   const handleBidReject = async (bidId) => {
     if (!bidId) return alert("Error: Bid ID missing");
-    setLoadingStates(prev => ({ ...prev, [bidId]: true }));
+    setLoadingStates((prev) => ({ ...prev, [bidId]: true }));
     try {
       await axios.post("http://localhost:5000/api/bids/update", { bidId, status: "Rejected" });
-      alert("Bid rejected successfully!");
-      setBids(bids.map(bid => (bid._id === bidId ? { ...bid, status: "Rejected" } : bid)));
       const response = await axios.get(`http://localhost:5000/api/bids/client/${account}`);
-      setBids(response.data);
+      console.log("Refreshed bids after reject:", response.data);
+      setBids(Array.isArray(response.data) ? response.data : []);
+      alert("Bid rejected successfully!");
     } catch (error) {
       console.error("Error rejecting bid:", error);
       alert("Failed to reject bid: " + error.message);
     } finally {
-      setLoadingStates(prev => ({ ...prev, [bidId]: false }));
+      setLoadingStates((prev) => ({ ...prev, [bidId]: false }));
+    }
+  };
+
+  const handleViewWork = async (bid) => {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contract = new ethers.Contract(bid.contractAddress, freelanceJobABI, provider);
+      const proofOfWork = await contract.proofOfWork();
+
+      setViewingWork({
+        ...bid,
+        contractProof: proofOfWork,
+      });
+    } catch (error) {
+      console.error("Error fetching work:", error);
+      setViewingWork({
+        ...bid,
+        contractProof: "Unable to fetch proof from contract",
+      });
     }
   };
 
   const handleApproveWork = async (contractAddress, bidId) => {
     if (!bidId || !provider) return alert("Error: Bid ID or MetaMask connection missing");
-    setLoadingStates(prev => ({ ...prev, [bidId]: true }));
+    setLoadingStates((prev) => ({ ...prev, [bidId]: true }));
     try {
-      const { ethers } = require("ethers");
       const signer = await provider.getSigner();
-      const { freelanceJobABI } = require("../contracts/FreelanceJobABI.js");
-
       const contract = new ethers.Contract(contractAddress, freelanceJobABI, signer);
-      console.log(`Approving work for contract: ${contractAddress}`);
-
-      const gasEstimate = await contract.estimateGas.approveWork();
-      console.log("Estimated gas:", gasEstimate.toString());
-
-      const gasLimit = gasEstimate * 120n / 100n;
-      const tx = await contract.approveWork({ gasLimit });
-      console.log("Transaction sent, hash:", tx.hash);
+      const tx = await contract.approveWork();
       await tx.wait();
-      console.log("Transaction confirmed");
-
-      await axios.post("http://localhost:5000/api/bids/update", { bidId, status: "Completed" });
+      await axios.post("http://localhost:5000/api/bids/update", { 
+        bidId, 
+        status: "Completed" 
+      });
+      const updatedBidsResponse = await axios.get(`http://localhost:5000/api/bids/client/${account}`);
+      console.log("Refreshed bids after approval:", updatedBidsResponse.data);
+      setBids(Array.isArray(updatedBidsResponse.data) ? updatedBidsResponse.data : []);
       alert("Work approved, funds transferred!");
-      setBids(bids.map(bid => (bid._id === bidId ? { ...bid, status: "Completed" } : bid)));
+      setViewingWork(null);
     } catch (error) {
       console.error("Error approving work:", error);
-      console.error("Error details:", {
-        message: error.message,
-        code: error.code,
-        data: error.data,
-        reason: error.reason,
-      });
-      alert("Failed to approve work: " + (error.message || "Unknown error - check console"));
+      alert("Failed to approve work: " + (error.reason || error.message));
     } finally {
-      setLoadingStates(prev => ({ ...prev, [bidId]: false }));
+      setLoadingStates((prev) => ({ ...prev, [bidId]: false }));
     }
   };
 
-  const getSmartContractDetails = (bid) => {
-    const dueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString();
+  const getSmartContractDetails = async (bid) => {
+    console.log("Bid taskId:", bid.taskId);
+    console.log("Available tasks:", tasks);
+
+    let task;
+    if (bid.taskId && typeof bid.taskId === "object" && bid.taskId._id) {
+      task = bid.taskId;
+    } else {
+      task = tasks.find((t) => t._id === bid.taskId);
+    }
+    if (!task) {
+      console.error("Task not found for taskId:", bid.taskId);
+      return { error: "Task not found. Proceed with caution or create the task first." };
+    }
+
+    const response = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=matic-network&vs_currencies=lkr");
+    const lkrPerPol = response.data["matic-network"].lkr || 200;
+    const polAmount = bid.amount / lkrPerPol;
+
+    const dueDate = new Date(task.deadline).toLocaleDateString();
     return {
-      amount: `${bid.amount} LKR`,
+      taskTitle: task.title,
+      taskDescription: task.description,
+      freelancerAddress: bid.freelancerId,
+      clientAddress: account,
+      lkrAmount: `${bid.amount} LKR`,
+      polAmount: `${polAmount.toFixed(4)} POL`,
       dueDate: dueDate,
-      freelancer: bid.freelancerId,
       terms: "Payment will be released upon work approval.",
     };
+  };
+
+  const formatAddress = (address) => {
+    if (!address || typeof address !== "string") return "Not available";
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
   return (
@@ -173,7 +236,7 @@ export default function ManageBids() {
           <p className="text-center text-red-600 bg-red-50 p-4 rounded-lg">{error}</p>
         ) : bids.length === 0 ? (
           <p className="text-center text-gray-600 bg-white p-6 rounded-lg shadow-md">
-            No bids available for {account.slice(0, 6)}...{account.slice(-4)}.
+            No bids available for {formatAddress(account)}.
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -185,9 +248,7 @@ export default function ManageBids() {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Bid by Freelancer</h3>
-                    <p className="text-sm text-gray-600">
-                      {bid.freelancerId.slice(0, 6)}...{bid.freelancerId.slice(-4)}
-                    </p>
+                    <p className="text-sm text-gray-600">{formatAddress(bid.freelancerId)}</p>
                   </div>
                   <span
                     className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -195,6 +256,8 @@ export default function ManageBids() {
                         ? "bg-yellow-100 text-yellow-800"
                         : bid.status === "Contract Sent"
                         ? "bg-blue-100 text-blue-800"
+                        : bid.status === "Accepted"
+                        ? "bg-indigo-100 text-indigo-800"
                         : bid.status === "Work Submitted"
                         ? "bg-green-100 text-green-800"
                         : "bg-red-100 text-red-800"
@@ -218,14 +281,17 @@ export default function ManageBids() {
                       rel="noopener noreferrer"
                       className="text-blue-600 hover:underline"
                     >
-                      {bid.contractAddress.slice(0, 6)}...{bid.contractAddress.slice(-4)}
+                      {formatAddress(bid.contractAddress)}
                     </a>
                   </p>
                 )}
                 {bid.status === "Pending" && (
                   <div className="flex space-x-3">
                     <button
-                      onClick={() => setSelectedBid(bid)}
+                      onClick={async () => {
+                        const details = await getSmartContractDetails(bid);
+                        setSelectedBid({ ...bid, contractDetails: details });
+                      }}
                       className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition w-full"
                       disabled={loadingStates[bid._id] || !account}
                     >
@@ -241,13 +307,15 @@ export default function ManageBids() {
                   </div>
                 )}
                 {bid.status === "Work Submitted" && (
-                  <button
-                    onClick={() => handleApproveWork(bid.contractAddress, bid._id)}
-                    className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition w-full"
-                    disabled={loadingStates[bid._id] || !account}
-                  >
-                    {loadingStates[bid._id] ? "Approving..." : "Approve Work"}
-                  </button>
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => handleViewWork(bid)}
+                      className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition w-full"
+                      disabled={loadingStates[bid._id] || !account}
+                    >
+                      View Submitted Work
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -255,27 +323,96 @@ export default function ManageBids() {
         )}
       </div>
 
-      {/* Smart Contract Preview Modal */}
-      {selectedBid && (
+      {viewingWork && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Submitted Work</h3>
+              <div className="space-y-4">
+                {viewingWork.submittedMessage && (
+                  <div>
+                    <p className="font-medium text-gray-700">Message:</p>
+                    <p className="text-gray-600 bg-gray-100 p-2 rounded">{viewingWork.submittedMessage}</p>
+                  </div>
+                )}
+                {viewingWork.proof && (
+                  <div>
+                    <p className="font-medium text-gray-700">Proof:</p>
+                    <p className="text-gray-600 bg-gray-100 p-2 rounded">{viewingWork.proof}</p>
+                  </div>
+                )}
+                {viewingWork.ipfsUrl && (
+                  <div>
+                    <p className="font-medium text-gray-700">PDF Submission:</p>
+                    <a
+                      href={viewingWork.ipfsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      View PDF
+                    </a>
+                  </div>
+                )}
+                {viewingWork.contractProof && (
+                  <div>
+                    <p className="font-medium text-gray-700">Contract Proof:</p>
+                    {viewingWork.contractProof.startsWith("https://gateway.pinata.cloud/ipfs/") ? (
+                      <a
+                        href={viewingWork.contractProof}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        View Proof on Pinata (IPFS)
+                      </a>
+                    ) : (
+                      <p className="text-gray-600 bg-gray-100 p-2 rounded">{viewingWork.contractProof}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={() => setViewingWork(null)}
+                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 transition"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => handleApproveWork(viewingWork.contractAddress, viewingWork._id)}
+                  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition"
+                  disabled={loadingStates[viewingWork._id] || !account}
+                >
+                  {loadingStates[viewingWork._id] ? "Approving..." : "Approve Work"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {selectedBid && selectedBid.contractDetails && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
             <h3 className="text-xl font-bold text-gray-900 mb-4">Smart Contract Preview</h3>
-            <div className="space-y-3">
-              <p>
-                <strong>Amount:</strong> {getSmartContractDetails(selectedBid).amount}
-              </p>
-              <p>
-                <strong>Due Date:</strong> {getSmartContractDetails(selectedBid).dueDate}
-              </p>
-              <p>
-                <strong>Freelancer:</strong>{" "}
-                {getSmartContractDetails(selectedBid).freelancer.slice(0, 6)}...
-                {getSmartContractDetails(selectedBid).freelancer.slice(-4)}
-              </p>
-              <p>
-                <strong>Terms:</strong> {getSmartContractDetails(selectedBid).terms}
-              </p>
-            </div>
+            {selectedBid.contractDetails.error ? (
+              <div>
+                <p className="text-red-600">{selectedBid.contractDetails.error}</p>
+                <p className="text-gray-600 mt-2">
+                  Note: You can still proceed with the contract, but ensure the task exists.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p><strong>Task Title:</strong> {selectedBid.contractDetails.taskTitle || "N/A"}</p>
+                <p><strong>Description:</strong> {selectedBid.contractDetails.taskDescription || "N/A"}</p>
+                <p><strong>Freelancer Address:</strong> {formatAddress(selectedBid.contractDetails.freelancerAddress)}</p>
+                <p><strong>Client Address:</strong> {formatAddress(selectedBid.contractDetails.clientAddress)}</p>
+                <p><strong>Amount (LKR):</strong> {selectedBid.contractDetails.lkrAmount || "N/A"}</p>
+                <p><strong>Amount (POL):</strong> {selectedBid.contractDetails.polAmount || "N/A"}</p>
+                <p><strong>Due Date:</strong> {selectedBid.contractDetails.dueDate || "N/A"}</p>
+                <p><strong>Terms:</strong> {selectedBid.contractDetails.terms || "N/A"}</p>
+              </div>
+            )}
             <div className="mt-6 flex justify-end space-x-3">
               <button
                 onClick={() => setSelectedBid(null)}
@@ -284,9 +421,7 @@ export default function ManageBids() {
                 Cancel
               </button>
               <button
-                onClick={() =>
-                  handleBidAccept(selectedBid._id, selectedBid.freelancerId, selectedBid.amount)
-                }
+                onClick={() => handleBidAccept(selectedBid._id, selectedBid.freelancerId, selectedBid.amount)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
                 disabled={loadingStates[selectedBid._id] || !account}
               >

@@ -2,18 +2,48 @@ import { useState, useEffect, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { Web3Context } from "../context/Web3Context";
 import Layout from "../components/Layout";
+import axios from "axios";
 
 export default function FreelancerDashboard() {
   const web3Context = useContext(Web3Context);
   const { account } = web3Context || { account: "" };
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [profile, setProfile] = useState({
+    name: "Freelancer Name",
+    completedJobs: 0,
+    rating: 0,
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!account) {
       setError("Please connect your wallet to access the dashboard.");
+      return;
     }
+    async function fetchProfile() {
+      try {
+        const response = await axios.get(`http://localhost:5000/api/profiles/freelancers/${account}`);
+        setProfile(response.data || {
+          name: "New Freelancer",
+          completedJobs: 0,
+          rating: 0,
+        });
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+        if (error.response && error.response.status === 404) {
+          setError("Profile not found. Please set up your profile.");
+          setProfile({
+            name: account ? "New Freelancer" : "Unknown",
+            completedJobs: 0,
+            rating: 0,
+          });
+        } else {
+          setError("Failed to fetch profile: " + error.message);
+        }
+      }
+    }
+    fetchProfile();
   }, [account]);
 
   const handleConnectWallet = async () => {
@@ -33,12 +63,46 @@ export default function FreelancerDashboard() {
     }
   };
 
+  const formatString = (str) =>
+    str && typeof str === "string" ? `${str.slice(0, 6)}...${str.slice(-4)}` : "Not available";
+
   return (
     <Layout userType="freelancer">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <header className="bg-gradient-to-r from-indigo-500 to-indigo-700 text-white p-6 rounded-lg mb-6 shadow-md">
-          <div className="flex justify-between items-center">
-            <h2 className="text-3xl font-bold">Freelancer Dashboard</h2>
+          <div className="flex flex-col space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-bold">Freelancer Dashboard</h2>
+              <button
+                onClick={() => navigate("/freelancer-profile")} // Updated to link to profile page
+                className="bg-white text-indigo-700 px-4 py-2 rounded-md hover:bg-gray-100 transition"
+              >
+                Profile
+              </button>
+            </div>
+            {/* Profile Card */}
+            {account && !error && (
+              <div className="bg-white p-4 rounded-lg shadow-md flex items-center space-x-4">
+                <img
+                  src={profile.profilePicture || "https://via.placeholder.com/50?text=Profile"}
+                  alt="Profile"
+                  className="w-12 h-12 rounded-full object-cover border-2 border-indigo-500"
+                />
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{profile.name}</h3>
+                  <p className="text-sm text-gray-600">Wallet: {formatString(account)}</p>
+                  <p className="text-sm text-gray-600">
+                    Jobs: {profile.completedJobs} | Rating: {profile.rating.toFixed(1)}/5
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate("/freelancer-profile")}
+                  className="ml-auto bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-700 transition"
+                >
+                  View Full Profile
+                </button>
+              </div>
+            )}
           </div>
         </header>
 

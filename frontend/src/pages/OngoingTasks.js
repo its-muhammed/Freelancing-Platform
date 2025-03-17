@@ -4,50 +4,36 @@ import { useNavigate } from "react-router-dom";
 import { ethers } from "ethers";
 import { freelanceJobABI } from "../contracts/FreelanceJobABI.js";
 import Layout from "../components/Layout";
-import { motion, AnimatePresence } from "framer-motion"; // For animations
+import { motion, AnimatePresence } from "framer-motion";
+
+const PINATA_API_KEY = "7d990cc95bf0720db5a0"; // Replace with your Pinata API Key
+const PINATA_API_SECRET = "5525b3dfae1091ca269d7f3d48cae818b10d26659c3fa8ed7ae97af03ef61989"; // Replace with your Pinata API Secret
+const PINATA_GATEWAY = "https://gateway.pinata.cloud/ipfs/";
 
 export default function OngoingTasks() {
-  const [account, setAccount] = useState(""); // Local state for account
+  const [account, setAccount] = useState("");
   const [tasks, setTasks] = useState([]);
   const [proof, setProof] = useState("");
-  const [loadingTasks, setLoadingTasks] = useState({}); // Track loading per task
+  const [pdfFile, setPdfFile] = useState(null);
+  const [loadingTasks, setLoadingTasks] = useState({});
   const [error, setError] = useState(null);
-  const [selectedTask, setSelectedTask] = useState(null); // For proof submission modal
-  const [contractTask, setContractTask] = useState(null); // For contract view modal
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [contractTask, setContractTask] = useState(null);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [filteredTasks, setFilteredTasks] = useState([]);
   const navigate = useNavigate();
 
-  // Fetch tasks and connect MetaMask
-  useEffect(() => {
-    async function fetchTasks() {
-      if (!account) {
-        setError("Please connect your wallet to view ongoing tasks.");
-        return;
-      }
-      setLoadingTasks({}); // Reset loading states
-      setError(null);
-      try {
-        const response = await axios.get(`http://localhost:5000/api/bids/freelancer/${account}`);
-        console.log("Fetched tasks:", response.data); // Debug log
-        const fetchedTasks = Array.isArray(response.data) ? response.data : [];
-        setTasks(fetchedTasks);
-        setFilteredTasks(fetchedTasks);
-      } catch (error) {
-        console.error("Error fetching tasks:", error);
-        setError("Failed to fetch tasks: " + error.message);
-      }
-    }
 
+  useEffect(() => {
     async function getAccount() {
       if (window.ethereum) {
         try {
           await window.ethereum.request({
             method: "wallet_switchEthereumChain",
-            params: [{ chainId: "0x13882" }], // Polygon Amoy
+            params: [{ chainId: "0x13882" }],
           });
           const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-          setAccount(accounts[0]); // Update local account state
-          console.log("Connected account:", accounts[0]); // Debug log
+          setAccount(accounts[0]);
         } catch (error) {
           console.error("Error connecting MetaMask:", error);
           setError("Failed to connect MetaMask: " + error.message);
@@ -56,24 +42,45 @@ export default function OngoingTasks() {
         setError("MetaMask not detected. Please install it to continue.");
       }
     }
-
     getAccount();
-    fetchTasks();
-  }, [account]); // Re-run when account changes
+  }, []);
 
-  // Filter tasks by status
-  const [filteredTasks, setFilteredTasks] = useState([]);
+  useEffect(() => {
+    async function fetchTasks() {
+      if (!account) {
+        setError("Please connect your wallet to view ongoing tasks.");
+        return;
+      }
+      setLoadingTasks((prev) => ({ ...prev, fetching: true }));
+      setError(null);
+      try {
+        const response = await axios.get(`http://localhost:5000/api/bids/freelancer/${account}`);
+        const fetchedTasks = Array.isArray(response.data) ? response.data : [];
+        console.log("Fetched bids in OngoingTasks:", fetchedTasks);
+        setTasks(fetchedTasks);
+        setFilteredTasks(fetchedTasks);
+      } catch (error) {
+        console.error("Error fetching tasks:", error);
+        setError("Failed to fetch tasks: " + error.message);
+      } finally {
+        setLoadingTasks((prev) => ({ ...prev, fetching: false }));
+      }
+    }
+    if (account) {
+      fetchTasks();
+    }
+  }, [account]);
+
   useEffect(() => {
     if (activeFilter === "All") {
       setFilteredTasks(tasks);
     } else {
-      setFilteredTasks(tasks.filter(task => task.status === activeFilter));
+      setFilteredTasks(tasks.filter((task) => task.status === activeFilter));
     }
   }, [activeFilter, tasks]);
 
   const handleConnectWallet = async () => {
     if (window.ethereum) {
-      setLoadingTasks({}); // Reset loading states
       try {
         await window.ethereum.request({ method: "eth_requestAccounts" });
         setError(null);
@@ -86,10 +93,13 @@ export default function OngoingTasks() {
     }
   };
 
-  // Accept a job
   const handleAcceptJob = async (contractAddress, bidId) => {
+    if (!contractAddress) {
+      alert("Error: No contract address available for this bid");
+      return;
+    }
     try {
-      setLoadingTasks(prev => ({ ...prev, [bidId]: "accepting" })); // Set loading for this task
+      setLoadingTasks((prev) => ({ ...prev, [bidId]: "accepting" }));
       if (!window.ethereum) throw new Error("MetaMask is not installed");
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
@@ -103,26 +113,55 @@ export default function OngoingTasks() {
       });
 
       alert("Job accepted successfully!");
-      setTasks(tasks.map(task => (task._id === bidId ? { ...task, status: "Accepted" } : task)));
-      setContractTask(null); // Close the contract modal after accepting
+      const updatedTasks = await axios.get(`http://localhost:5000/api/bids/freelancer/${account}`);
+      setTasks(updatedTasks.data);
+      setContractTask(null);
     } catch (error) {
       console.error("Error accepting job:", error);
-      alert("Failed to accept job: " + error.message);
+      alert("Failed to accept job: " + (error.reason || error.message));
     } finally {
-      setLoadingTasks(prev => ({ ...prev, [bidId]: undefined })); // Clear loading for this task
+      setLoadingTasks((prev) => ({ ...prev, [bidId]: undefined }));
     }
   };
 
-  // Submit proof of work
   const handleSubmitProof = async (contractAddress, bidId) => {
+    if (!contractAddress) {
+      alert("Error: No contract address available for this bid");
+      return;
+    }
     try {
-      setLoadingTasks(prev => ({ ...prev, [bidId]: "submitting" })); // Set submitting for this task
-      if (!proof) throw new Error("Please enter proof of work");
+      setLoadingTasks((prev) => ({ ...prev, [bidId]: "submitting" }));
+      let proofData;
+
+      if (pdfFile) {
+        // Upload PDF to Pinata
+        const formData = new FormData();
+        formData.append("file", pdfFile);
+
+        const pinataResponse = await axios.post(
+          "https://api.pinata.cloud/pinning/pinFileToIPFS",
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              pinata_api_key: PINATA_API_KEY,
+              pinata_secret_api_key: PINATA_API_SECRET,
+            },
+          }
+        );
+
+        const ipfsHash = pinataResponse.data.IpfsHash;
+        proofData = `${PINATA_GATEWAY}${ipfsHash}`; // e.g., https://gateway.pinata.cloud/ipfs/<hash>
+      } else {
+        if (!proof) throw new Error("Please enter proof of work or upload a PDF");
+        proofData = proof; // Use text proof as-is
+      }
+
       if (!window.ethereum) throw new Error("MetaMask is not installed");
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(contractAddress, freelanceJobABI, signer);
-      const tx = await contract.submitWork(proof);
+      const tx = await contract.submitWork(proofData);
       await tx.wait();
 
       await axios.post("http://localhost:5000/api/bids/update", {
@@ -131,22 +170,76 @@ export default function OngoingTasks() {
       });
 
       alert("Proof submitted successfully!");
-      setTasks(tasks.map(task => (task._id === bidId ? { ...task, status: "Work Submitted" } : task)));
-      setProof(""); // Clear input
+      const updatedTasks = await axios.get(`http://localhost:5000/api/bids/freelancer/${account}`);
+      setTasks(updatedTasks.data);
+      setProof("");
+      setPdfFile(null);
       setSelectedTask(null);
     } catch (error) {
       console.error("Error submitting proof:", error);
-      alert("Failed to submit proof: " + error.message);
+      alert("Failed to submit proof: " + (error.reason || error.message));
     } finally {
-      setLoadingTasks(prev => ({ ...prev, [bidId]: undefined })); // Clear submitting for this task
+      setLoadingTasks((prev) => ({ ...prev, [bidId]: undefined }));
+    }
+  };
+
+  const fetchContractDetails = async (contractAddress, bid) => {
+    if (!contractAddress) {
+      return { error: "No contract address available" };
+    }
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contract = new ethers.Contract(contractAddress, freelanceJobABI, provider);
+
+      // Read public variables from the contract
+      const clientAddr = await contract.client();
+      const freelancerAddr = await contract.freelancer();
+      const payment = await contract.payment();
+      const dueDate = await contract.dueDate();
+      const workSubmitted = await contract.workSubmitted();
+      const workApproved = await contract.workApproved();
+
+      const response = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=matic-network&vs_currencies=lkr");
+      const lkrPerPol = response.data["matic-network"].lkr || 200;
+      const lkrAmount = (Number(ethers.formatEther(payment)) * lkrPerPol).toFixed(2);
+
+      // Fetch task details if bid.taskId is not populated
+      let taskTitle = "N/A";
+      let taskDescription = "N/A";
+      if (bid.taskId) {
+        if (typeof bid.taskId === "object") {
+          taskTitle = bid.taskId.title || "N/A";
+          taskDescription = bid.taskId.description || "N/A";
+        } else {
+          const taskResponse = await axios.get(`http://localhost:5000/api/tasks/${bid.taskId}`);
+          taskTitle = taskResponse.data.title || "N/A";
+          taskDescription = taskResponse.data.description || "N/A";
+        }
+      }
+
+      return {
+        taskTitle,
+        taskDescription,
+        freelancerAddress: freelancerAddr,
+        clientAddress: clientAddr,
+        lkrAmount: `${lkrAmount} LKR`,
+        polAmount: `${ethers.formatEther(payment)} POL`,
+        dueDate: new Date(Number(dueDate) * 1000).toLocaleDateString(),
+        workSubmitted,
+        workApproved,
+        terms: "Payment will be released upon successful submission of work as per the agreed timeline.",
+      };
+    } catch (error) {
+      console.error("Error fetching contract details:", error);
+      return { error: "Failed to fetch contract details: " + error.message };
     }
   };
 
   const statusColors = {
     "Contract Sent": "bg-yellow-100 text-yellow-800",
-    "Accepted": "bg-blue-100 text-blue-800",
+    Accepted: "bg-blue-100 text-blue-800",
     "Work Submitted": "bg-green-100 text-green-800",
-    "Completed": "bg-gray-100 text-gray-800",
+    Completed: "bg-gray-100 text-gray-800",
   };
 
   const formatString = (str) => {
@@ -156,7 +249,6 @@ export default function OngoingTasks() {
   return (
     <Layout userType="freelancer">
       <div className="flex min-h-screen bg-gray-100">
-        {/* Sidebar */}
         <div className="w-64 bg-gradient-to-b from-indigo-600 to-indigo-800 text-white p-6 shadow-lg">
           <h2 className="text-2xl font-bold mb-8">Freelancer Dashboard</h2>
           <nav className="space-y-4">
@@ -187,7 +279,6 @@ export default function OngoingTasks() {
           </nav>
         </div>
 
-        {/* Main Content */}
         <div className="flex-1 p-8">
           <header className="bg-gradient-to-r from-indigo-500 to-indigo-700 text-white p-6 rounded-lg mb-8 shadow-md">
             <h2 className="text-3xl font-bold">Ongoing Tasks</h2>
@@ -200,7 +291,7 @@ export default function OngoingTasks() {
               </p>
               <button
                 onClick={handleConnectWallet}
-                disabled={Object.keys(loadingTasks).length > 0} // Disable if any task is loading
+                disabled={Object.keys(loadingTasks).length > 0}
                 className={`bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition ${
                   Object.keys(loadingTasks).length > 0 ? "opacity-50 cursor-not-allowed" : ""
                 }`}
@@ -208,7 +299,7 @@ export default function OngoingTasks() {
                 Connect Wallet
               </button>
             </div>
-          ) : loadingTasks["fetching"] ? (
+          ) : loadingTasks.fetching ? (
             <div className="text-center">
               <p className="text-gray-600">Loading tasks...</p>
               <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mt-4"></div>
@@ -217,9 +308,8 @@ export default function OngoingTasks() {
             <p className="text-center text-red-600 bg-red-50 p-4 rounded-lg">{error}</p>
           ) : (
             <>
-              {/* Status Filters */}
               <div className="flex space-x-4 mb-6">
-                {["All", "Contract Sent", "Accepted", "Work Submitted", "Completed"].map(status => (
+                {["All", "Contract Sent", "Accepted", "Work Submitted", "Completed"].map((status) => (
                   <button
                     key={status}
                     onClick={() => setActiveFilter(status)}
@@ -234,7 +324,6 @@ export default function OngoingTasks() {
                 ))}
               </div>
 
-              {/* Task List */}
               {filteredTasks.length === 0 ? (
                 <p className="text-center text-gray-600 bg-white p-6 rounded-lg shadow-md">
                   No ongoing tasks for {formatString(account)}.
@@ -242,7 +331,7 @@ export default function OngoingTasks() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <AnimatePresence>
-                    {filteredTasks.map(task => (
+                    {filteredTasks.map((task) => (
                       <motion.div
                         key={task._id}
                         initial={{ opacity: 0, y: 20 }}
@@ -254,7 +343,7 @@ export default function OngoingTasks() {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h3 className="text-lg font-semibold text-gray-900">
-                              Task ID: {task._id.slice(0, 8)}...
+                              Bid ID: {task._id.slice(0, 8)}...
                             </h3>
                             <p className="text-gray-600">Client: {formatString(task.clientId)}</p>
                           </div>
@@ -267,7 +356,7 @@ export default function OngoingTasks() {
                           </span>
                         </div>
                         <p className="text-gray-700 mb-2">
-                          <strong>Amount:</strong> {task.amount} POL
+                          <strong>Amount:</strong> {task.amount} LKR
                         </p>
                         <p className="text-gray-700 mb-4 line-clamp-2">
                           <strong>Message:</strong> {task.message}
@@ -286,7 +375,6 @@ export default function OngoingTasks() {
                           </p>
                         )}
 
-                        {/* Progress Tracker */}
                         <div className="mb-4">
                           <div className="flex justify-between text-sm text-gray-600 mb-1">
                             <span>Progress</span>
@@ -304,11 +392,13 @@ export default function OngoingTasks() {
                           </div>
                         </div>
 
-                        {/* Actions */}
                         {task.status === "Contract Sent" && (
                           <div className="flex space-x-2">
                             <button
-                              onClick={() => setContractTask(task)}
+                              onClick={async () => {
+                                const details = await fetchContractDetails(task.contractAddress, task);
+                                setContractTask({ ...task, contractDetails: details });
+                              }}
                               className="flex-1 bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition"
                               disabled={loadingTasks[task._id]}
                             >
@@ -317,7 +407,7 @@ export default function OngoingTasks() {
                             <button
                               onClick={() => handleAcceptJob(task.contractAddress, task._id)}
                               className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition"
-                              disabled={loadingTasks[task._id]}
+                              disabled={loadingTasks[task._id] || !task.contractAddress}
                             >
                               {loadingTasks[task._id] === "accepting" ? "Accepting..." : "Accept Job"}
                             </button>
@@ -327,7 +417,7 @@ export default function OngoingTasks() {
                           <button
                             onClick={() => setSelectedTask(task)}
                             className="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition"
-                            disabled={loadingTasks[task._id]}
+                            disabled={loadingTasks[task._id] || !task.contractAddress}
                           >
                             {loadingTasks[task._id] === "submitting" ? "Submitting..." : "Submit Proof"}
                           </button>
@@ -340,52 +430,31 @@ export default function OngoingTasks() {
             </>
           )}
 
-          {/* Contract View Modal */}
-          {contractTask && (
+          {contractTask && contractTask.contractDetails && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full">
                 <h3 className="text-xl font-bold text-gray-900 mb-4">Contract Details</h3>
-                <div className="space-y-4">
+                {contractTask.contractDetails.error ? (
                   <div>
-                    <p className="text-gray-700">
-                      <strong>Task ID:</strong> {contractTask._id}
+                    <p className="text-red-600">{contractTask.contractDetails.error}</p>
+                    <p className="text-gray-600 mt-2">
+                      Please ensure the task exists or contact support.
                     </p>
                   </div>
-                  <div>
-                    <p className="text-gray-700">
-                      <strong>Client Address:</strong> {contractTask.clientId}
-                    </p>
+                ) : (
+                  <div className="space-y-4">
+                    <p><strong>Task Title:</strong> {contractTask.contractDetails.taskTitle}</p>
+                    <p><strong>Description:</strong> {contractTask.contractDetails.taskDescription}</p>
+                    <p><strong>Freelancer Address:</strong> {formatString(contractTask.contractDetails.freelancerAddress)}</p>
+                    <p><strong>Client Address:</strong> {formatString(contractTask.contractDetails.clientAddress)}</p>
+                    <p><strong>Amount (LKR):</strong> {contractTask.contractDetails.lkrAmount}</p>
+                    <p><strong>Amount (POL):</strong> {contractTask.contractDetails.polAmount}</p>
+                    <p><strong>Due Date:</strong> {contractTask.contractDetails.dueDate}</p>
+                    <p><strong>Work Submitted:</strong> {contractTask.contractDetails.workSubmitted ? "Yes" : "No"}</p>
+                    <p><strong>Work Approved:</strong> {contractTask.contractDetails.workApproved ? "Yes" : "No"}</p>
+                    <p><strong>Terms:</strong> {contractTask.contractDetails.terms}</p>
                   </div>
-                  <div>
-                    <p className="text-gray-700">
-                      <strong>Amount:</strong> {contractTask.amount} POL
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-700">
-                      <strong>Message:</strong> {contractTask.message}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-700">
-                      <strong>Contract Address:</strong>{" "}
-                      <a
-                        href={`https://amoy.polygonscan.com/address/${contractTask.contractAddress}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-indigo-600 hover:underline"
-                      >
-                        {contractTask.contractAddress}
-                      </a>
-                    </p>
-                  </div>
-                  {/* Add more contract details if available */}
-                  <div>
-                    <p className="text-gray-700">
-                      <strong>Terms:</strong> Payment will be released upon successful submission of work as per the agreed timeline.
-                    </p>
-                  </div>
-                </div>
+                )}
                 <div className="mt-6 flex justify-end space-x-3">
                   <button
                     onClick={() => setContractTask(null)}
@@ -393,31 +462,27 @@ export default function OngoingTasks() {
                   >
                     Close
                   </button>
-                  <button
-                    onClick={() => handleAcceptJob(contractTask.contractAddress, contractTask._id)}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition"
-                    disabled={loadingTasks[contractTask._id]}
-                  >
-                    {loadingTasks[contractTask._id] === "accepting" ? "Accepting..." : "Accept Job"}
-                  </button>
+                  {!contractTask.contractDetails.error && (
+                    <button
+                      onClick={() => handleAcceptJob(contractTask.contractAddress, contractTask._id)}
+                      className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition"
+                      disabled={loadingTasks[contractTask._id]}
+                    >
+                      {loadingTasks[contractTask._id] === "accepting" ? "Accepting..." : "Accept Job"}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Proof Submission Modal */}
           {selectedTask && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-                <h3 className="text-xl font-bold text-gray-900 mb-4">
-                  Submit Proof for Task
-                </h3>
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Submit Proof for Bid</h3>
                 <div className="space-y-4">
                   <div>
-                    <label
-                      className="block text-gray-700 font-medium mb-1"
-                      htmlFor="proof"
-                    >
+                    <label className="block text-gray-700 font-medium mb-1" htmlFor="proof">
                       Proof of Work (e.g., IPFS Hash)
                     </label>
                     <textarea
@@ -426,6 +491,21 @@ export default function OngoingTasks() {
                       onChange={(e) => setProof(e.target.value)}
                       className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 h-24 resize-none"
                       placeholder="Enter proof of work (e.g., IPFS hash)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 font-medium mb-1" htmlFor="pdfUpload">
+                      Upload PDF (optional)
+                    </label>
+                    <input
+                      type="file"
+                      id="pdfUpload"
+                      accept="application/pdf"
+                      onChange={(e) => {
+                        if (e.target.files.length > 0) {
+                          setPdfFile(e.target.files[0]);
+                        }
+                      }}
                     />
                   </div>
                 </div>
@@ -439,7 +519,7 @@ export default function OngoingTasks() {
                   <button
                     onClick={() => handleSubmitProof(selectedTask.contractAddress, selectedTask._id)}
                     className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition"
-                    disabled={loadingTasks[selectedTask._id] || !proof}
+                    disabled={loadingTasks[selectedTask._id] || (!proof && !pdfFile)}
                   >
                     {loadingTasks[selectedTask._id] === "submitting" ? "Submitting..." : "Submit Proof"}
                   </button>

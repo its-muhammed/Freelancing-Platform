@@ -1,6 +1,5 @@
 import { useState, useEffect, useContext } from "react";
 import axios from "axios";
-//import { useNavigate } from "react-router-dom";
 import { Web3Context } from "../context/Web3Context";
 import Layout from "../components/Layout";
 
@@ -10,10 +9,10 @@ export default function AvailableTasks() {
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [bidTask, setBidTask] = useState(null);
   const [bidAmount, setBidAmount] = useState("");
   const [bidMessage, setBidMessage] = useState("");
- // const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchTasks() {
@@ -24,7 +23,9 @@ export default function AvailableTasks() {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await axios.get("http://localhost:5000/api/tasks/freelancer-available");
+        const response = await axios.get("http://localhost:5000/api/tasks/freelancer-available", {
+          params: { status: "Open" },
+        });
         console.log("Fetched Tasks:", response.data);
         setTasks(Array.isArray(response.data) ? response.data : []);
       } catch (error) {
@@ -38,7 +39,6 @@ export default function AvailableTasks() {
     async function switchChainAndGetAccount() {
       if (window.ethereum) {
         try {
-          // Switch to Polygon Amoy testnet (chainId: 0x13882)
           await window.ethereum.request({
             method: "wallet_switchEthereumChain",
             params: [{ chainId: "0x13882" }],
@@ -79,9 +79,8 @@ export default function AvailableTasks() {
       setError("Bid amount and message are required.");
       return;
     }
-
     try {
-      const task = tasks.find(t => t._id === taskId);
+      const task = tasks.find((t) => t._id === taskId);
       if (!task) throw new Error("Task not found");
 
       const bidData = {
@@ -97,13 +96,15 @@ export default function AvailableTasks() {
         headers: { "Content-Type": "application/json" },
       });
       console.log("Bid response:", response.data);
-      setError("Bid placed successfully!");
+      setSuccess("Bid placed successfully!");
+      setError(null);
       setBidTask(null);
       setBidAmount("");
       setBidMessage("");
     } catch (error) {
       console.error("Error placing bid:", error);
       setError("Failed to place bid: " + (error.response?.data?.message || error.message));
+      setSuccess(null);
     }
   };
 
@@ -142,6 +143,8 @@ export default function AvailableTasks() {
           </div>
         ) : error ? (
           <p className="text-center text-red-600 bg-red-50 p-4 rounded-lg">{error}</p>
+        ) : success ? (
+          <p className="text-center text-green-600 bg-green-50 p-4 rounded-lg mb-4">{success}</p>
         ) : tasks.length === 0 ? (
           <p className="text-center text-gray-600 bg-white p-6 rounded-lg shadow-md">
             No available tasks for {formatString(account)}.
@@ -174,7 +177,6 @@ export default function AvailableTasks() {
           </div>
         )}
 
-        {/* Bid Submission Modal */}
         {bidTask && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">

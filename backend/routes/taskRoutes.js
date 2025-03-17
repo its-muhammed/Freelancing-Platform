@@ -9,7 +9,18 @@ router.post("/create", async (req, res) => {
     if (!title || !description || !budget || !deadline || !clientId) {
       return res.status(400).json({ message: "Missing required fields" });
     }
-    const task = new Task({ title, description, budget, deadline, clientId, status: "Open" });
+    const deadlineDate = new Date(deadline);
+    if (deadlineDate <= new Date()) {
+      return res.status(400).json({ message: "Deadline must be in the future" });
+    }
+    const task = new Task({
+      title,
+      description,
+      budget,
+      deadline: deadlineDate,
+      clientId: clientId.toLowerCase(),
+      status: "Open",
+    });
     await task.save();
     console.log("Task Created:", task);
     res.status(201).json({ message: "Task created successfully", task });
@@ -33,8 +44,10 @@ router.get("/all", async (req, res) => {
 // GET: Retrieve all tasks posted by a specific client
 router.get("/client/:clientId", async (req, res) => {
   try {
-    const clientId = req.params.clientId;
+    const clientId = req.params.clientId.toLowerCase();
+    console.log(`Fetching tasks for clientId: ${clientId}`);
     const tasks = await Task.find({ clientId });
+    console.log(`Found ${tasks.length} tasks:`, tasks);
     res.status(200).json(tasks);
   } catch (error) {
     console.error("Error fetching client tasks:", error);
@@ -49,7 +62,11 @@ router.post("/complete-task", async (req, res) => {
     if (!taskId) {
       return res.status(400).json({ message: "Task ID is required" });
     }
-    const updatedTask = await Task.findByIdAndUpdate(taskId, { status: "Completed" }, { new: true });
+    const updatedTask = await Task.findByIdAndUpdate(
+      taskId,
+      { status: "Completed" },
+      { new: true }
+    );
     res.status(200).json({ message: "Task marked as completed", task: updatedTask });
   } catch (error) {
     console.error("Error marking task as completed:", error);
@@ -65,7 +82,15 @@ router.put("/edit/:taskId", async (req, res) => {
     if (!title || !description || !budget || !deadline) {
       return res.status(400).json({ message: "All fields are required" });
     }
-    const updatedTask = await Task.findByIdAndUpdate(taskId, { title, description, budget, deadline }, { new: true });
+    const deadlineDate = new Date(deadline);
+    if (deadlineDate <= new Date()) {
+      return res.status(400).json({ message: "Deadline must be in the future" });
+    }
+    const updatedTask = await Task.findByIdAndUpdate(
+      taskId,
+      { title, description, budget, deadline: deadlineDate },
+      { new: true }
+    );
     res.status(200).json({ message: "Task updated successfully", task: updatedTask });
   } catch (error) {
     console.error("Error updating task:", error);
@@ -88,7 +113,7 @@ router.delete("/delete/:taskId", async (req, res) => {
 // GET: Retrieve all available tasks for freelancers
 router.get("/freelancer-available", async (req, res) => {
   try {
-    const tasks = await Task.find({});
+    const tasks = await Task.find({ status: "Open" });
     console.log("Fetched Tasks:", tasks);
     res.status(200).json(tasks);
   } catch (error) {
@@ -100,7 +125,7 @@ router.get("/freelancer-available", async (req, res) => {
 // GET: Retrieve all ongoing tasks for a freelancer
 router.get("/ongoing/:freelancerId", async (req, res) => {
   try {
-    const freelancerId = req.params.freelancerId;
+    const freelancerId = req.params.freelancerId.toLowerCase();
     const tasks = await Task.find({ freelancerId, status: "Ongoing" });
     res.status(200).json(tasks);
   } catch (error) {
@@ -116,7 +141,11 @@ router.post("/assign", async (req, res) => {
     if (!taskId || !freelancerId) {
       return res.status(400).json({ message: "Task ID and Freelancer ID are required" });
     }
-    const updatedTask = await Task.findByIdAndUpdate(taskId, { freelancerId, status: "Ongoing" }, { new: true });
+    const updatedTask = await Task.findByIdAndUpdate(
+      taskId,
+      { freelancerId: freelancerId.toLowerCase(), status: "Ongoing" },
+      { new: true }
+    );
     res.status(200).json({ message: "Task assigned to freelancer", task: updatedTask });
   } catch (error) {
     console.error("Error assigning task:", error);
@@ -127,7 +156,7 @@ router.post("/assign", async (req, res) => {
 // GET: Fetch Completed Tasks
 router.get("/completed/:clientId", async (req, res) => {
   try {
-    const clientId = req.params.clientId;
+    const clientId = req.params.clientId.toLowerCase();
     const tasks = await Task.find({ clientId, status: "Completed" });
     res.status(200).json(tasks);
   } catch (error) {

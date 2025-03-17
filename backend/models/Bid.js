@@ -1,17 +1,48 @@
 const mongoose = require("mongoose");
 
 const bidSchema = new mongoose.Schema({
-  freelancerId: { type: String, required: true }, // Freelancer's wallet address
-  clientId: { type: String, required: true },     // Client's wallet address
-  amount: { type: Number, required: true },       // Bid amount in POL
-  message: { type: String, required: true },      // Bid message
-  status: { 
-    type: String, 
-    enum: ["Pending", "Contract Sent", "Accepted", "Work Submitted", "Completed", "Rejected"], 
-    default: "Pending" 
+  taskId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Task", // Ensure this references the Task model
+    required: true,
   },
-  contractAddress: { type: String },              // Smart contract address (optional until contract is sent)
-  createdAt: { type: Date, default: Date.now },
+  freelancerId: {
+    type: String,
+    required: true,
+  },
+  clientId: {
+    type: String,
+    required: true,
+  },
+  amount: {
+    type: Number,
+    required: true,
+  },
+  message: {
+    type: String,
+    required: true,
+  },
+  status: {
+    type: String,
+    default: "Pending",
+  },
+  contractAddress: {
+    type: String,
+    default: null,
+  },
+  // New fields for submitted work:
+  proof: {
+    type: String,
+    default: null,
+  },
+  submittedMessage: {
+    type: String,
+    default: "",
+  },
+  ipfsUrl: {
+    type: String,
+    default: "",
+  },
 });
 
 module.exports = mongoose.model("Bid", bidSchema);

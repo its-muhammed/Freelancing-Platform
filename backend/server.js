@@ -8,7 +8,7 @@ const connectDB = require("./config/db");
 const userRoutes = require("./routes/userRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const bidRoutes = require("./routes/bidRoutes");
-const profileRoutes = require("./routes/profiles");
+const profilesRoutes = require("./routes/profiles");
 
 
 const app = express();
@@ -20,7 +20,9 @@ app.use(express.json()); // This must be included to parse JSON requests
 app.use("/api/users", userRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/bids", bidRoutes);
-app.use("/api", profileRoutes);
+app.use("/api/profiles", profilesRoutes);
+app.use('/uploads', express.static('uploads'));
+
 
 // MongoDB Connection
 mongoose

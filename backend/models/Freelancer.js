@@ -4,7 +4,7 @@ const freelancerSchema = new mongoose.Schema({
   account: { type: String, required: true, unique: true },
   name: { type: String, default: "Freelancer Name" },
   title: { type: String, default: "Professional Freelancer" },
-  bio: { type: String, default: "I am a skilled freelancer with experience in various domains." },
+  bio: { type: String, default: "I am a skilled freelancer." },
   skills: [{ type: String }],
   portfolio: [
     {
@@ -16,12 +16,12 @@ const freelancerSchema = new mongoose.Schema({
   reviews: [
     {
       client: String,
-      rating: Number,
+      rating: { type: Number, min: 0, max: 5 },
       comment: String,
     },
   ],
   completedJobs: { type: Number, default: 0 },
-  rating: { type: Number, default: 0 },
+  rating: { type: Number, default: 0, min: 0, max: 5 },
   profilePicture: { type: String, default: "" },
 });
 

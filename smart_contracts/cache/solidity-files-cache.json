@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "D:\\IIT\\FInal Year Modules\\Computer Science Final Project\\Projects\\Freelancing-Platform\\smart_contracts\\contracts\\FreelanceJob.sol": {
-      "lastModificationDate": 1741436338121,
-      "contentHash": "b1255d471fef6efb4c8fb1e4b816c590",
+      "lastModificationDate": 1741764950520,
+      "contentHash": "b6e599df8f232abe939dfaf06908e60e",
       "sourceName": "contracts/FreelanceJob.sol",
       "solcConfig": {
         "version": "0.8.19",
