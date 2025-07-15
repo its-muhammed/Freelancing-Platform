@@ -20,48 +20,60 @@ export default function Navbar() {
     }
   };
 
+  const formatAddress = (address) => {
+    return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
+  };
+
   return (
-    <nav className="fixed top-0 w-full bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg z-50">
+    <nav className="fixed top-0 w-full bg-slate-800 text-white shadow-md z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
+          {/* Logo */}
           <div className="flex items-center">
-            <h1 className="text-2xl font-bold tracking-tight">FreelancePro</h1>
+            <h1
+              className="text-2xl font-bold tracking-tight cursor-pointer hover:text-gray-300 transition"
+              onClick={() => navigate("/")}
+            >
+              FreeWork
+            </h1>
           </div>
-          <div className="flex items-center space-x-4">
+
+          {/* Navigation Links */}
+          <div className="flex items-center space-x-6">
             <button
-              onClick={() => navigate("/")} // Using navigate here
-              className="hover:bg-blue-700 px-3 py-2 rounded-md text-sm font-medium"
+              onClick={() => navigate("/")}
+              className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition"
             >
               Home
             </button>
             <button
-              onClick={() => navigate("/client-dashboard")} // Using navigate here
-              className="hover:bg-blue-700 px-3 py-2 rounded-md text-sm font-medium"
+              onClick={() => navigate("/client-dashboard")}
+              className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition"
             >
               Dashboard
             </button>
             <button
-              onClick={() => navigate("/manage-bids")} // Using navigate here
-              className="hover:bg-blue-700 px-3 py-2 rounded-md text-sm font-medium"
+              onClick={() => navigate("/manage-bids")}
+              className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition"
             >
               Manage Bids
             </button>
             <button
-              onClick={() => navigate("/manage-tasks")} // Using navigate here
-              className="hover:bg-blue-700 px-3 py-2 rounded-md text-sm font-medium"
+              onClick={() => navigate("/manage-tasks")}
+              className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition"
             >
               Manage Tasks
             </button>
+
+            {/* Wallet Connection */}
             {account ? (
               <div className="flex items-center space-x-2">
-                <span className="text-sm">
-                  {account.slice(0, 6)}...{account.slice(-4)}
-                </span>
+                <span className="text-sm text-gray-300">Connected: {formatAddress(account)}</span>
               </div>
             ) : (
               <button
                 onClick={handleConnectWallet}
-                className="bg-green-500 hover:bg-green-600 px-3 py-1 rounded-md text-sm"
+                className="bg-teal-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-teal-700 transition"
               >
                 Connect Wallet
               </button>

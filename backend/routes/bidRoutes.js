@@ -3,19 +3,10 @@ const router = express.Router();
 const path = require("path");
 const multer = require("multer");
 const Bid = require("../models/Bid");
+const Client = require("../models/Client");
 const { deployFreelanceJobContract } = require("../blockchain/blockchainService");
 
-// Configure multer storage – files will be saved in the "uploads" folder
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/"); // Ensure the 'uploads' directory exists and is accessible
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + "-" + Date.now() + ext);
-  },
-});
-const upload = multer({ storage: storage });
+
 
 // Fetch client's bids
 router.get("/client/:clientId", async (req, res) => {
@@ -31,7 +22,7 @@ router.get("/client/:clientId", async (req, res) => {
   }
 });
 
-// Fetch freelancer's bids (optional filter by status)
+// Fetch freelancer's bids
 router.get("/freelancer/:freelancerId", async (req, res) => {
   try {
     const freelancerId = req.params.freelancerId.toLowerCase();
@@ -48,30 +39,80 @@ router.get("/freelancer/:freelancerId", async (req, res) => {
   }
 });
 
-// Create a new bid
+// Create bid
+
+// Create bid
 router.post("/create", async (req, res) => {
-  console.log("Raw request body:", req.body);
   try {
     const { taskId, freelancerId, clientId, amount, message } = req.body;
-    console.log("Creating bid:", { taskId, freelancerId, clientId, amount, message });
 
+    // Validate required fields
     if (!taskId || !freelancerId || !clientId || !amount || !message) {
-      return res.status(400).json({ message: "Missing required fields" });
+      return res.status(400).json({ message: "All fields are required" });
     }
 
-    const bid = new Bid({
+    // Create bid data object matching the schema
+    const bidData = {
       taskId,
       freelancerId: freelancerId.toLowerCase(),
       clientId: clientId.toLowerCase(),
-      amount,
+      amount: parseFloat(amount),
       message,
+      status: "Pending", // Matches default in schema
+      contractAddress: null, // Matches default in schema
+      proof: null, // Matches default in schema
+      submittedMessage: "", // Matches default in schema
+      ipfsUrl: "" // Matches default in schema
+    };
+
+    // Create new bid
+    const newBid = new Bid(bidData);
+    await newBid.save();
+
+    console.log("Bid created successfully:", newBid);
+
+    // Populate taskId for the response
+    const populatedBid = await Bid.findById(newBid._id).populate("taskId");
+    
+    res.status(201).json({
+      message: "Bid created successfully",
+      bid: populatedBid
     });
-    await bid.save();
-    console.log("Bid created:", bid);
-    res.status(201).json(bid);
   } catch (error) {
     console.error("Error creating bid:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ 
+      message: "Failed to create bid", 
+      error: error.message 
+    });
+  }
+});
+
+
+// Update bid 
+router.post("/update", async (req, res) => {
+  try {
+    const { bidId, status, contractAddress, ipfsUrl, proof, submittedMessage, clientId } = req.body;
+    console.log("Updating bid with data:", { bidId, status, contractAddress, clientId });
+    const bid = await Bid.findById(bidId).populate("taskId");
+    if (!bid) {
+      console.log("Bid not found for bidId:", bidId);
+      return res.status(404).json({ message: "Bid not found" });
+    }
+    bid.status = status || bid.status;
+    if (contractAddress) bid.contractAddress = contractAddress;
+    if (ipfsUrl) bid.ipfsUrl = ipfsUrl;
+    if (proof) bid.proof = proof;
+    if (submittedMessage) bid.submittedMessage = submittedMessage;
+if (clientId) {
+  bid.clientId = clientId.toLowerCase();
+  console.log("Updated bid with clientId:", clientId.toLowerCase());
+}
+    await bid.save();
+    console.log("Bid updated:", bid);
+    res.status(200).json({ message: "Bid updated successfully", bid });
+  } catch (error) {
+    console.error("Error updating bid:", error);
+    res.status(500).json({ message: "Failed to update bid", error: error.message });
   }
 });
 
@@ -86,39 +127,10 @@ router.get("/task/:taskId", async (req, res) => {
   }
 });
 
-// Update bid status and optionally store contract address, IPFS URL, proof, and submitted message
-router.post("/update", async (req, res) => {
-  try {
-    const { bidId, status, contractAddress, ipfsUrl, proof, submittedMessage } = req.body;
-    const bid = await Bid.findById(bidId).populate("taskId");
 
-    if (!bid) {
-      return res.status(404).json({ message: "Bid not found" });
-    }
 
-    bid.status = status;
-    if (contractAddress) {
-      bid.contractAddress = contractAddress;
-    }
-    if (ipfsUrl) {
-      bid.ipfsUrl = ipfsUrl; // store the IPFS URL along with the bid
-    }
-    if (proof) {
-      bid.proof = proof;
-    }
-    if (submittedMessage) {
-      bid.submittedMessage = submittedMessage;
-    }
 
-    await bid.save();
-    res.status(200).json({ message: "Bid updated successfully", bid });
-  } catch (error) {
-    console.error("Error updating bid:", error);
-    res.status(500).json({ message: "Failed to update bid", error: error.message });
-  }
-});
-
-// Deploy contract (called from frontend in production, but keep for testing)
+// Deploy contract
 router.post("/deploy-contract", async (req, res) => {
   const { freelancerAddress, lkrAmount, bidId, dueDate } = req.body;
   try {
@@ -141,31 +153,6 @@ router.post("/deploy-contract", async (req, res) => {
   }
 });
 
-// NEW ROUTE: Upload proof (PDF or text) and return a proof reference
-router.post("/uploadProof", upload.single("pdf"), async (req, res) => {
-  try {
-    const { bidId, proofText } = req.body;
-    let proofUrl = "";
-    if (req.file) {
-      // If a file is uploaded, generate a URL for the stored file.
-      proofUrl = `http://localhost:5000/${req.file.path}`;
-    } else if (proofText) {
-      // If no file, use the provided text as the proof.
-      proofUrl = proofText;
-    } else {
-      return res.status(400).json({ message: "No file or proof text provided" });
-    }
-    // Optionally, you can update the bid document here as well:
-    // const bid = await Bid.findById(bidId);
-    // if (!bid) return res.status(404).json({ message: "Bid not found" });
-    // bid.proof = proofUrl;
-    // await bid.save();
 
-    res.status(200).json({ url: proofUrl, message: "Proof stored successfully" });
-  } catch (error) {
-    console.error("Error uploading proof:", error);
-    res.status(500).json({ message: "Error uploading proof", error: error.message });
-  }
-});
 
 module.exports = router;

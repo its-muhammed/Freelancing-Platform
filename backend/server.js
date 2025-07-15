@@ -9,8 +9,8 @@ const userRoutes = require("./routes/userRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const bidRoutes = require("./routes/bidRoutes");
 const profilesRoutes = require("./routes/profiles");
-
-
+const chatRoutes = require("./routes/chatRoutes");
+const reviewRoutes = require('./routes/reviews');
 const app = express();
 connectDB();
 
@@ -22,7 +22,8 @@ app.use("/api/tasks", taskRoutes);
 app.use("/api/bids", bidRoutes);
 app.use("/api/profiles", profilesRoutes);
 app.use('/uploads', express.static('uploads'));
-
+app.use("/api/chat", chatRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // MongoDB Connection
 mongoose

@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { Web3Context } from "../context/Web3Context";
+import { useToast } from "../components/ToastContainer"; // Adjust path based on your file structure
 import Layout from "../components/Layout";
 
 export default function PostTaskPage() {
@@ -12,52 +13,51 @@ export default function PostTaskPage() {
   const [budget, setBudget] = useState("");
   const [deadline, setDeadline] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const { addToast } = useToast();
   const navigate = useNavigate();
 
-  // Retrieve MetaMask Account when component loads
   useEffect(() => {
     async function getAccount() {
       if (!window.ethereum) {
-        setError("MetaMask is not installed. Please install it to continue.");
+        addToast("MetaMask is not installed. Please install it to continue.", "error");
         return;
       }
       try {
         const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
         if (accounts.length === 0) {
-          setError("No MetaMask account found. Please connect your wallet.");
+          addToast("No MetaMask account found. Please connect your wallet.", "error");
         }
       } catch (error) {
         console.error("Error fetching MetaMask account:", error);
-        setError("Failed to connect MetaMask: " + error.message);
+        addToast("Failed to connect MetaMask: " + error.message, "error");
       }
     }
     getAccount();
-  }, []);
+  }, [addToast]);
 
   const handleConnectWallet = async () => {
     if (window.ethereum) {
       try {
         await window.ethereum.request({ method: "eth_requestAccounts" });
         console.log("Wallet connection requested");
-        setError(null);
+        addToast("Wallet connected successfully!", "success");
       } catch (error) {
         console.error("Error connecting wallet:", error);
-        setError("Failed to connect wallet: " + error.message);
+        addToast("Failed to connect wallet: " + error.message, "error");
       }
     } else {
-      setError("MetaMask not detected.");
+      addToast("MetaMask not detected.", "error");
     }
   };
 
   const handlePostTask = async () => {
     if (!title || !description || !budget || !deadline) {
-      setError("All fields are required.");
+      addToast("All fields are required.", "error");
       return;
     }
 
     if (!account) {
-      setError("MetaMask account is missing. Please connect your wallet.");
+      addToast("MetaMask account is missing. Please connect your wallet.", "error");
       return;
     }
 
@@ -71,7 +71,6 @@ export default function PostTaskPage() {
     };
 
     setIsLoading(true);
-    setError(null);
 
     try {
       const response = await axios.post("http://localhost:5000/api/tasks/create", taskData, {
@@ -79,14 +78,17 @@ export default function PostTaskPage() {
       });
 
       if (response.status === 201) {
-        alert("Task posted successfully!");
-        navigate("/manage-tasks"); // navigate is used here
+        addToast("Task posted successfully!", "success");
+        setTimeout(() => navigate("/manage-tasks"), 2000);
       } else {
-        setError("Failed to post task. Try again later.");
+        addToast("Failed to post task. Try again later.", "error");
       }
     } catch (error) {
       console.error("Error posting task:", error);
-      setError("Failed to post task: " + (error.response?.data?.message || error.message));
+      addToast(
+        "Failed to post task: " + (error.response?.data?.message || error.message),
+        "error"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -94,139 +96,126 @@ export default function PostTaskPage() {
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        <header className="bg-gradient-to-r from-blue-500 to-blue-700 text-white p-6 rounded-lg mb-6 shadow-md">
-          <h2 className="text-3xl font-bold">Post a New Task</h2>
+      <div className="bg-white">
+        <header className="bg-slate-800 text-white p-6 shadow-md">
+          <div className="max-w-3xl mx-auto">
+            <h2 className="text-3xl font-bold tracking-tight">Post a New Task</h2>
+          </div>
         </header>
 
-        {!account ? (
-          <div className="text-center bg-white p-6 rounded-lg shadow-md">
-            <p className="text-gray-600 mb-4">Please connect your wallet to post a task.</p>
-            <button
-              onClick={handleConnectWallet}
-              className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition"
-            >
-              Connect Wallet
-            </button>
-          </div>
-        ) : (
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            {error && (
-              <p className="text-center text-red-600 bg-red-50 p-4 rounded-lg mb-4">{error}</p>
-            )}
-            <div className="space-y-6">
-              <div>
-                <label className="block text-gray-700 font-medium mb-2" htmlFor="title">
-                  Task Title
-                </label>
-                <input
-                  id="title"
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    title || !error ? "border-gray-300" : "border-red-500"
-                  }`}
-                  placeholder="Enter task title (e.g., Build a website)"
-                />
-                {error && !title && (
-                  <p className="text-red-500 text-sm mt-1">Task title is required.</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-gray-700 font-medium mb-2" htmlFor="description">
-                  Description
-                </label>
-                <textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-32 resize-none ${
-                    description || !error ? "border-gray-300" : "border-red-500"
-                  }`}
-                  placeholder="Describe your task in detail..."
-                />
-                {error && !description && (
-                  <p className="text-red-500 text-sm mt-1">Description is required.</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-gray-700 font-medium mb-2" htmlFor="budget">
-                  Budget (LKR)
-                </label>
-                <input
-                  id="budget"
-                  type="number"
-                  value={budget}
-                  onChange={(e) => setBudget(e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    budget || !error ? "border-gray-300" : "border-red-500"
-                  }`}
-                  placeholder="Enter budget in LKR (e.g., 5000)"
-                />
-                {error && !budget && (
-                  <p className="text-red-500 text-sm mt-1">Budget is required.</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-gray-700 font-medium mb-2" htmlFor="deadline">
-                  Deadline
-                </label>
-                <input
-                  id="deadline"
-                  type="date"
-                  value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    deadline || !error ? "border-gray-300" : "border-red-500"
-                  }`}
-                />
-                {error && !deadline && (
-                  <p className="text-red-500 text-sm mt-1">Deadline is required.</p>
-                )}
-              </div>
-
+        <main className="max-w-3xl mx-auto px-4 py-8 min-h-screen bg-gray-100">
+          {!account ? (
+            <div className="text-center bg-white p-6 rounded-lg shadow-md">
+              <p className="text-gray-600 mb-4">Please connect your wallet to post a task.</p>
               <button
-                onClick={handlePostTask}
-                disabled={isLoading || !account}
-                className={`w-full bg-blue-600 text-white px-6 py-3 rounded-md shadow-lg hover:bg-blue-700 transition flex items-center justify-center ${
-                  isLoading || !account ? "opacity-50 cursor-not-allowed" : ""
-                }`}
+                onClick={handleConnectWallet}
+                className="bg-teal-600 text-white px-6 py-2 rounded-md hover:bg-teal-700 transition"
               >
-                {isLoading ? (
-                  <>
-                    <svg
-                      className="animate-spin h-5 w-5 mr-2 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                    Posting Task...
-                  </>
-                ) : (
-                  "Post Task"
-                )}
+                Connect Wallet
               </button>
             </div>
+          ) : (
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="title">
+                    Task Title
+                  </label>
+                  <input
+                    id="title"
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    placeholder="Enter task title (e.g., Build a website)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="description">
+                    Description
+                  </label>
+                  <textarea
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 h-32 resize-none"
+                    placeholder="Describe your task in detail..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="budget">
+                    Budget (LKR)
+                  </label>
+                  <input
+                    id="budget"
+                    type="number"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus-outline-none focus:ring-2 focus:ring-teal-500"
+                    placeholder="Enter budget in LKR (e.g., 5000)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="deadline">
+                    Deadline
+                  </label>
+                  <input
+                    id="deadline"
+                    type="date"
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <button
+                  onClick={handlePostTask}
+                  disabled={isLoading || !account}
+                  className={`w-full bg-teal-600 text-white px-6 py-3 rounded-md hover:bg-teal-700 transition ${
+                    isLoading || !account ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {isLoading ? (
+                    <>
+                      <svg
+                        className="animate-spin h-5 w-5 mr-2 text-white inline"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l-2.647z"
+                        ></path>
+                      </svg>
+                      Posting Task...
+                    </>
+                  ) : (
+                    "Post Task"
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+
+        <footer className="bg-slate-800 text-white p-4">
+          <div className="max-w-3xl mx-auto text-center">
+            <p className="text-sm">© 2025 FreeWork. All rights reserved.</p>
           </div>
-        )}
+        </footer>
       </div>
     </Layout>
   );

@@ -1,78 +1,88 @@
-// SPDX-License-Identifier: UNLICENSED
+```
 pragma solidity ^0.8.19;
 
-contract FreelanceJob {
-    address public client;          // The client who deploys the contract
-    address public freelancer;      // The freelancer assigned to the job
-    uint256 public payment;         // In wei (POL converted from LKR), held as escrow
-    uint256 public dueDate;         // Unix timestamp for deadline
-    bool public jobAccepted;        // Tracks if freelancer accepted the job
-    bool public workSubmitted;      // Tracks if work is submitted
-    bool public workApproved;       // Tracks if work is approved
-    string public proofOfWork;      // IPFS hash or URL for proof
+// Smart contract for managing a freelance task with escrow
+contract FreelanceTask {
+    address public employer;        // Address of the employer who initiates the contract
+    address public worker;          // Address of the worker assigned to the task
+    uint256 public escrowAmount;    // Funds (in wei) held in escrow for payment
+    uint256 public deadline;        // Unix timestamp for task completion deadline
+    bool public taskAccepted;       // Flag to check if worker accepted the task
+    bool public taskDelivered;      // Flag to check if task has been delivered
+    bool public taskVerified;       // Flag to check if task is verified by employer
+    string public deliveryProof;    // IPFS hash or URL for task proof
 
+    // Events to track task progress
     event JobAccepted(address indexed freelancer);
     event WorkSubmitted(string proof);
     event WorkApproved(uint256 payment);
     event FundsRefunded(address indexed client, uint256 amount);
 
-    constructor(address _freelancer, uint256 _dueDate) payable {
-        require(_freelancer != address(0), "Invalid freelancer address");
-        require(_dueDate > block.timestamp, "Due date must be in future");
-        require(msg.value > 0, "Payment must be greater than 0");
-        client = msg.sender;        // Deployer (client) locks funds
-        freelancer = _freelancer;   // Freelancer from bid
-        payment = msg.value;        // Escrow amount in wei
-        dueDate = _dueDate;         // Deadline in seconds
-        jobAccepted = false;
-        workSubmitted = false;
-        workApproved = false;
+    // Constructor to initialize task details
+    constructor(address _worker, uint256 _deadline) payable {
+        require(_worker != address(0), "Worker address cannot be zero"); // Ensure valid worker address
+        require(_deadline > block.timestamp, "Deadline must be in the future"); // Ensure deadline is valid
+        require(msg.value > 0, "Escrow must have funds"); // Ensure payment is provided
+        employer = msg.sender;      // Set employer as contract deployer
+        worker = _worker;           // Set worker from input
+        escrowAmount = msg.value;   // Store escrow funds
+        deadline = _deadline;       // Set task deadline
+        taskAccepted = false;       // Initialize task as not accepted
+        taskDelivered = false;      // Initialize task as not delivered
+        taskVerified = false;       // Initialize task as not verified
     }
 
+    // Worker accepts the task
     function acceptJob() external {
-        require(msg.sender == freelancer, "Only freelancer can accept");
-        require(block.timestamp < dueDate, "Job expired");
-        require(!jobAccepted, "Job already accepted");
-        jobAccepted = true;
-        emit JobAccepted(freelancer);
+        require(msg.sender == worker, "Only worker can accept task"); // Restrict to assigned worker
+        require(block.timestamp < deadline, "Task deadline has passed"); // Check if task is still active
+        require(!taskAccepted, "Task already accepted"); // Prevent re-acceptance
+        taskAccepted = true;        // Mark task as accepted
+        emit JobAccepted(worker);   // Emit acceptance event
     }
 
+    // Worker submits task proof
     function submitWork(string memory _proof) external {
-        require(msg.sender == freelancer, "Only freelancer can submit");
-        require(jobAccepted, "Job not yet accepted");
-        require(!workSubmitted, "Work already submitted");
-        require(block.timestamp < dueDate, "Deadline passed");
-        workSubmitted = true;
-        proofOfWork = _proof;
-        emit WorkSubmitted(_proof);
+        require(msg.sender == worker, "Only worker can submit"); // Restrict to worker
+        require(taskAccepted, "Task not accepted yet"); // Ensure task is accepted
+        require(!taskDelivered, "Task already submitted"); // Prevent re-submission
+        require(block.timestamp < deadline, "Deadline has passed"); // Check deadline
+        taskDelivered = true;       // Mark task as delivered
+        deliveryProof = _proof;     // Store proof of work
+        emit WorkSubmitted(_proof); // Emit submission event
     }
 
+    // Employer verifies and approves task
     function approveWork() external {
-        require(msg.sender == client, "Only client can approve");
-        require(workSubmitted, "Work not submitted yet");
-        require(!workApproved, "Work already approved");
-        workApproved = true;
-        emit WorkApproved(payment);
-        payable(freelancer).transfer(payment); // Release funds to freelancer
+        require(msg.sender == employer, "Only employer can approve"); // Restrict to employer
+        require(taskDelivered, "Task not submitted yet"); // Ensure task is delivered
+        require(!taskVerified, "Task already approved"); // Prevent re-approval
+        taskVerified = true;        // Mark task as verified
+        emit WorkApproved(escrowAmount); // Emit approval event
+        payable(worker).transfer(escrowAmount); // Release funds to worker
     }
 
+    // Refund employer if task is expired
     function refundIfExpired() external {
-        require(msg.sender == client, "Only client can refund");
-        require(block.timestamp >= dueDate, "Job not expired yet");
-        require(!workSubmitted, "Work was submitted");
-        emit FundsRefunded(client, payment);
-        payable(client).transfer(payment); // Refund client
+        require(msg.sender == employer, "Only employer can refund"); // Restrict to employer
+        require(block.timestamp >= deadline, "Task not yet expired"); // Check if deadline passed
+        require(!taskDelivered, "Task was submitted"); // Ensure no submission
+        emit FundsRefunded(employer, escrowAmount); // Emit refund event
+        payable(employer).transfer(escrowAmount); // Refund employer
     }
 
+    // Employer cancels task before submission
     function cancelJob() external {
-        require(msg.sender == client, "Only client can cancel");
-        require(!workSubmitted, "Work already submitted");
-        require(!workApproved, "Work already approved");
-        emit FundsRefunded(client, payment);
-        payable(client).transfer(payment); // Refund client
+        require(msg.sender == employer, "Only employer can cancel"); // Restrict to employer
+        require(!taskDelivered, "Task already submitted"); // Ensure no submission
+        require(!taskVerified, "Task already approved"); // Ensure not approved
+        emit FundsRefunded(employer, escrowAmount); // Emit refund event
+        payable(employer).transfer(escrowAmount); // Refund employer
     }
 
+    // View function to check contract balance
     function getContractBalance() external view returns (uint256) {
-        return address(this).balance;
+        return address(this).balance; // Return current escrow balance
     }
 }
+```

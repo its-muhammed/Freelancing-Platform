@@ -1,14 +1,13 @@
 import { useState, useEffect, useContext } from "react";
-//import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Web3Context } from "../context/Web3Context";
-import Layout from "../components/Layout";
 import axios from "axios";
 import { motion } from "framer-motion";
 
 export default function FreelancerProfile() {
   const web3Context = useContext(Web3Context);
   const { account } = web3Context || { account: "" };
-  //const navigate = useNavigate();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState({
     name: "",
     title: "",
@@ -34,7 +33,7 @@ export default function FreelancerProfile() {
     async function fetchProfile() {
       try {
         const response = await axios.get(`http://localhost:5000/api/profiles/freelancers/${account}`);
-        setProfile(response.data || {
+        const defaultProfile = {
           name: "Freelancer Name",
           title: "Professional Freelancer",
           bio: "I am a skilled freelancer.",
@@ -44,8 +43,22 @@ export default function FreelancerProfile() {
           completedJobs: 0,
           rating: 0,
           profilePicture: "",
+        };
+        const fetchedProfile = response.data || defaultProfile;
+        setProfile({
+          ...defaultProfile,
+          ...fetchedProfile,
+          skills: Array.isArray(fetchedProfile.skills) ? fetchedProfile.skills : [],
+          portfolio: Array.isArray(fetchedProfile.portfolio) ? fetchedProfile.portfolio : [],
+          reviews: Array.isArray(fetchedProfile.reviews) ? fetchedProfile.reviews : [],
         });
-        setEditedProfile(response.data || {});
+        setEditedProfile({
+          ...defaultProfile,
+          ...fetchedProfile,
+          skills: Array.isArray(fetchedProfile.skills) ? fetchedProfile.skills : [],
+          portfolio: Array.isArray(fetchedProfile.portfolio) ? fetchedProfile.portfolio : [],
+          reviews: Array.isArray(fetchedProfile.reviews) ? fetchedProfile.reviews : [],
+        });
       } catch (error) {
         setError("Failed to fetch profile: " + error.message);
       } finally {
@@ -90,7 +103,14 @@ export default function FreelancerProfile() {
         `http://localhost:5000/api/profiles/freelancers/update/${account}`,
         editedProfile
       );
-      setProfile(response.data);
+      const updatedProfile = response.data || {};
+      setProfile({
+        ...profile,
+        ...updatedProfile,
+        skills: Array.isArray(updatedProfile.skills) ? updatedProfile.skills : [],
+        portfolio: Array.isArray(updatedProfile.portfolio) ? updatedProfile.portfolio : [],
+        reviews: Array.isArray(updatedProfile.reviews) ? updatedProfile.reviews : [],
+      });
       setIsEditing(false);
       alert("Profile updated successfully!");
     } catch (error) {
@@ -101,19 +121,77 @@ export default function FreelancerProfile() {
   const formatString = (str) =>
     str && typeof str === "string" ? `${str.slice(0, 6)}...${str.slice(-4)}` : "Not available";
 
+  function FreelancerNavbar() {
+    const formatAccount = (acc) =>
+      acc && typeof acc === "string" ? `${acc.slice(0, 6)}...${acc.slice(-4)}` : "Not connected";
+
+    return (
+      <nav className="bg-slate-800 text-white p-4 shadow-md">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold tracking-tight">Freelancer Portal</h1>
+          <div className="flex items-center space-x-6">
+            <span className="text-sm text-gray-300">{formatAccount(account)}</span>
+            <button
+              onClick={() => navigate("/freelancer-dashboard")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => navigate("/available-tasks")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Available Tasks
+            </button>
+            <button
+              onClick={() => navigate("/ongoing-tasks")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Ongoing Tasks
+            </button>
+            <button
+              onClick={() => navigate("/freelancer-profile")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Profile
+            </button>
+            <button
+              onClick={() => navigate("/")}
+              className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 transition"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </nav>
+    );
+  }
+
+  function FreelancerFooter() {
+    return (
+      <footer className="bg-slate-800 text-white p-4 text-center">
+        <p className="text-sm">© 2025 FreeWork. Built for Freelancers, by Freelancers.</p>
+      </footer>
+    );
+  }
+
   if (loading) {
     return (
-      <Layout userType="freelancer">
-        <div className="flex justify-center items-center h-screen">
-          <div className="animate-spin h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full"></div>
+      <div className="bg-white">
+        <FreelancerNavbar />
+        <div className="flex justify-center items-center h-screen bg-gray-100">
+          <div className="animate-spin h-12 w-12 border-4 border-teal-600 border-t-transparent rounded-full"></div>
         </div>
-      </Layout>
+        <FreelancerFooter />
+      </div>
     );
   }
 
   return (
-    <Layout userType="freelancer">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="bg-white">
+      <FreelancerNavbar />
+
+      <main className="max-w-7xl mx-auto px-4 py-8 min-h-screen bg-gray-100">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -124,7 +202,7 @@ export default function FreelancerProfile() {
             <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition"
+              className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition"
             >
               {isEditing ? "Cancel" : "Edit Profile"}
             </button>
@@ -141,7 +219,7 @@ export default function FreelancerProfile() {
                   name="name"
                   value={editedProfile.name || ""}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                   required
                 />
               </div>
@@ -152,7 +230,7 @@ export default function FreelancerProfile() {
                   name="title"
                   value={editedProfile.title || ""}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                   required
                 />
               </div>
@@ -162,7 +240,7 @@ export default function FreelancerProfile() {
                   name="bio"
                   value={editedProfile.bio || ""}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-24"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 h-24"
                   required
                 />
               </div>
@@ -174,7 +252,7 @@ export default function FreelancerProfile() {
                     type="text"
                     value={skill || ""}
                     onChange={(e) => handleSkillChange(e, index)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 mb-2"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 mb-2"
                     required
                   />
                 ))}
@@ -195,7 +273,7 @@ export default function FreelancerProfile() {
                       placeholder="Title"
                       value={item.title || ""}
                       onChange={(e) => handlePortfolioChange(e, index, "title")}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                       required
                     />
                     <input
@@ -203,7 +281,7 @@ export default function FreelancerProfile() {
                       placeholder="Description"
                       value={item.description || ""}
                       onChange={(e) => handlePortfolioChange(e, index, "description")}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                       required
                     />
                     <input
@@ -211,7 +289,7 @@ export default function FreelancerProfile() {
                       placeholder="Link"
                       value={item.link || ""}
                       onChange={(e) => handlePortfolioChange(e, index, "link")}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                       required
                     />
                   </div>
@@ -231,12 +309,12 @@ export default function FreelancerProfile() {
                   name="profilePicture"
                   value={editedProfile.profilePicture || ""}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                 />
               </div>
               <button
                 type="submit"
-                className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition"
+                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition"
               >
                 Save Changes
               </button>
@@ -247,22 +325,39 @@ export default function FreelancerProfile() {
                 <img
                   src={profile.profilePicture || "https://via.placeholder.com/150"}
                   alt="Profile"
-                  className="w-36 h-36 rounded-full object-cover border-4 border-indigo-500"
+                  className="w-36 h-36 rounded-full object-cover border-4 border-teal-500"
                 />
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{profile.name}</h2>
-                  <p className="text-lg text-gray-600">{profile.title}</p>
+                  <h2 className="text-2xl font-bold text-gray-900">{profile.name || "Unnamed Freelancer"}</h2>
+                  <p className="text-lg text-gray-600">{profile.title || "No title"}</p>
+                  <p className="text-gray-700">
+                    <strong>Rating:</strong> {profile.rating ? profile.rating.toFixed(1) : "0.0"}/5
+                  </p>
                 </div>
               </div>
-              <p className="text-gray-700"><strong>Bio:</strong> {profile.bio || "No bio available"}</p>
-              <p className="text-gray-700"><strong>Skills:</strong> {profile.skills.join(", ") || "None"}</p>
+              <p className="text-gray-700">
+                <strong>Bio:</strong> {profile.bio || "No bio available"}
+              </p>
+              <p className="text-gray-700">
+                <strong>Skills:</strong>{" "}
+                {Array.isArray(profile.skills) && profile.skills.length > 0 ? profile.skills.join(", ") : "None"}
+              </p>
               <div>
                 <p className="text-gray-700 font-medium">Portfolio</p>
-                {profile.portfolio.length > 0 ? (
+                {Array.isArray(profile.portfolio) && profile.portfolio.length > 0 ? (
                   <ul className="list-disc pl-5 mt-2 space-y-2">
                     {profile.portfolio.map((item, index) => (
                       <li key={index} className="text-gray-600">
-                        <strong>{item.title}</strong>: {item.description} (<a href={item.link} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">Link</a>)
+                        <strong>{item.title || "Untitled"}</strong>: {item.description || "No description"} (
+                        <a
+                          href={item.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal-600 hover:underline"
+                        >
+                          {item.link ? "Link" : "No link"}
+                        </a>
+                        )
                       </li>
                     ))}
                   </ul>
@@ -271,17 +366,23 @@ export default function FreelancerProfile() {
                 )}
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <p className="text-gray-700"><strong>Completed Jobs:</strong> {profile.completedJobs}</p>
-                <p className="text-gray-700"><strong>Rating:</strong> {profile.rating.toFixed(1)}/5</p>
+                <p className="text-gray-700">
+                  <strong>Completed Jobs:</strong> {profile.completedJobs || 0}
+                </p>
+                <p className="text-gray-700">
+                  <strong>Rating:</strong> {profile.rating ? profile.rating.toFixed(1) : "0.0"}/5
+                </p>
               </div>
-              <p className="text-gray-700"><strong>Wallet:</strong> {formatString(account)}</p>
+              <p className="text-gray-700">
+                <strong>Wallet:</strong> {formatString(account)}
+              </p>
               <div>
                 <p className="text-gray-700 font-medium">Reviews</p>
-                {profile.reviews.length > 0 ? (
+                {Array.isArray(profile.reviews) && profile.reviews.length > 0 ? (
                   <ul className="list-disc pl-5 mt-2 space-y-2">
                     {profile.reviews.map((review, index) => (
                       <li key={index} className="text-gray-600">
-                        {review.comment} (Rating: {review.rating}/5 by {review.client})
+                        {review.comment || "No comment"} (Rating: {review.rating || 0}/5 by {review.client || "Anonymous"})
                       </li>
                     ))}
                   </ul>
@@ -292,7 +393,9 @@ export default function FreelancerProfile() {
             </div>
           )}
         </motion.div>
-      </div>
-    </Layout>
+      </main>
+
+      <FreelancerFooter />
+    </div>
   );
 }

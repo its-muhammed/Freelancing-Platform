@@ -50,7 +50,27 @@ const deployFreelanceJobContract = async (freelancerAddress, lkrAmount, bidId, d
     }
 
     const factory = new ethers.ContractFactory(freelanceJobABI, freelanceJobBytecode, wallet);
-    const contract = await factory.deploy(freelancerAddress, dueDate, { value: amountInWei });
+    
+    // Estimate gas for deployment
+    const deployTx = factory.getDeployTransaction(freelancerAddress, dueDate, { value: amountInWei });
+    const gasEstimate = await provider.estimateGas(deployTx);
+    const gasLimit = gasEstimate.mul(120).div(100); // Add 20% buffer
+
+    // Fetch current base fee and set EIP-1559 parameters
+    const feeData = await provider.getFeeData();
+    const maxPriorityFeePerGas = ethers.parseUnits("150", "gwei"); // High-priority fee
+    const maxFeePerGas = feeData.lastBaseFeePerGas
+      ? feeData.lastBaseFeePerGas.add(maxPriorityFeePerGas).mul(120).div(100) // Add 20% buffer to base fee + priority
+      : ethers.parseUnits("200", "gwei"); // Fallback if base fee unavailable
+
+    console.log(`Using maxPriorityFeePerGas: ${ethers.formatUnits(maxPriorityFeePerGas, "gwei")} Gwei, maxFeePerGas: ${ethers.formatUnits(maxFeePerGas, "gwei")} Gwei, gasLimit: ${gasLimit}`);
+
+    const contract = await factory.deploy(freelancerAddress, dueDate, {
+      value: amountInWei,
+      maxPriorityFeePerGas,
+      maxFeePerGas,
+      gasLimit
+    });
     const txReceipt = await contract.waitForDeployment();
     const contractAddress = await contract.getAddress();
 

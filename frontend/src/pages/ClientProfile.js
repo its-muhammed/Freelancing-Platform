@@ -1,14 +1,13 @@
 import { useState, useEffect, useContext } from "react";
-//import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Web3Context } from "../context/Web3Context";
-import Layout from "../components/Layout";
 import axios from "axios";
 import { motion } from "framer-motion";
 
 export default function ClientProfile() {
   const web3Context = useContext(Web3Context);
   const { account } = web3Context || { account: "" };
-  //const navigate = useNavigate();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState({
     name: "",
     company: "",
@@ -18,7 +17,6 @@ export default function ClientProfile() {
     reviewsGiven: [],
     totalSpent: 0,
     rating: 0,
-    profilePicture: "",
   });
   const [editedProfile, setEditedProfile] = useState({});
   const [isEditing, setIsEditing] = useState(false);
@@ -34,7 +32,7 @@ export default function ClientProfile() {
     async function fetchProfile() {
       try {
         const response = await axios.get(`http://localhost:5000/api/profiles/clients/${account}`);
-        setProfile(response.data || {
+        const defaultProfile = {
           name: "Client Name",
           company: "Company Name",
           bio: "I am a client looking for talent.",
@@ -43,9 +41,22 @@ export default function ClientProfile() {
           reviewsGiven: [],
           totalSpent: 0,
           rating: 0,
-          profilePicture: "",
+        };
+        const fetchedProfile = response.data || defaultProfile;
+        setProfile({
+          ...defaultProfile,
+          ...fetchedProfile,
+          preferences: Array.isArray(fetchedProfile.preferences) ? fetchedProfile.preferences : [],
+          pastProjects: Array.isArray(fetchedProfile.pastProjects) ? fetchedProfile.pastProjects : [],
+          reviewsGiven: Array.isArray(fetchedProfile.reviewsGiven) ? fetchedProfile.reviewsGiven : [],
         });
-        setEditedProfile(response.data || {});
+        setEditedProfile({
+          ...defaultProfile,
+          ...fetchedProfile,
+          preferences: Array.isArray(fetchedProfile.preferences) ? fetchedProfile.preferences : [],
+          pastProjects: Array.isArray(fetchedProfile.pastProjects) ? fetchedProfile.pastProjects : [],
+          reviewsGiven: Array.isArray(fetchedProfile.reviewsGiven) ? fetchedProfile.reviewsGiven : [],
+        });
       } catch (error) {
         setError("Failed to fetch profile: " + error.message);
       } finally {
@@ -90,7 +101,14 @@ export default function ClientProfile() {
         `http://localhost:5000/api/profiles/clients/update/${account}`,
         editedProfile
       );
-      setProfile(response.data);
+      const updatedProfile = response.data || {};
+      setProfile({
+        ...profile,
+        ...updatedProfile,
+        preferences: Array.isArray(updatedProfile.preferences) ? updatedProfile.preferences : [],
+        pastProjects: Array.isArray(updatedProfile.pastProjects) ? updatedProfile.pastProjects : [],
+        reviewsGiven: Array.isArray(updatedProfile.reviewsGiven) ? updatedProfile.reviewsGiven : [],
+      });
       setIsEditing(false);
       alert("Profile updated successfully!");
     } catch (error) {
@@ -101,36 +119,94 @@ export default function ClientProfile() {
   const formatString = (str) =>
     str && typeof str === "string" ? `${str.slice(0, 6)}...${str.slice(-4)}` : "Not available";
 
+  function ClientNavbar() {
+    const formatAccount = (acc) =>
+      acc && typeof acc === "string" ? `${acc.slice(0, 6)}...${acc.slice(-4)}` : "Not connected";
+
+    return (
+      <nav className="bg-slate-800 text-white p-4 shadow-md">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold tracking-tight">Client Portal</h1>
+          <div className="flex items-center space-x-6">
+            <span className="text-sm text-gray-300">{formatAccount(account)}</span>
+            <button
+              onClick={() => navigate("/client-dashboard")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => navigate("/post-task")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Post Task
+            </button>
+            <button
+              onClick={() => navigate("/manage-tasks")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Manage Tasks
+            </button>
+            <button
+              onClick={() => navigate("/client-profile")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Profile
+            </button>
+            <button
+              onClick={() => navigate("/")}
+              className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 transition"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </nav>
+    );
+  }
+
+  function ClientFooter() {
+    return (
+      <footer className="bg-slate-800 text-white p-4 text-center">
+        <p className="text-sm">© 2025 FreeWork. All rights reserved.</p>
+      </footer>
+    );
+  }
+
   if (loading) {
     return (
-      <Layout>
-        <div className="flex justify-center items-center h-screen">
-          <div className="animate-spin h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+      <div className="bg-white">
+        <ClientNavbar />
+        <div className="flex justify-center items-center h-screen bg-gray-100">
+          <div className="animate-spin h-12 w-12 border-4 border-teal-600 border-t-transparent rounded-full"></div>
         </div>
-      </Layout>
+        <ClientFooter />
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="bg-white">
+      <ClientNavbar />
+
+      <main className="max-w-7xl mx-auto px-4 py-8 min-h-screen bg-gray-100">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="bg-white rounded-xl shadow-lg p-6"
+          className="bg-white rounded-lg shadow-md p-6"
         >
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+              className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition"
             >
               {isEditing ? "Cancel" : "Edit Profile"}
             </button>
           </div>
 
-          {error && <p className="text-red-600 mb-4">{error}</p>}
+          {error && <p className="text-red-600 bg-red-50 p-4 rounded-lg mb-4">{error}</p>}
 
           {isEditing ? (
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -141,7 +217,7 @@ export default function ClientProfile() {
                   name="name"
                   value={editedProfile.name || ""}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                   required
                 />
               </div>
@@ -152,7 +228,7 @@ export default function ClientProfile() {
                   name="company"
                   value={editedProfile.company || ""}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                   required
                 />
               </div>
@@ -162,7 +238,7 @@ export default function ClientProfile() {
                   name="bio"
                   value={editedProfile.bio || ""}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 h-24"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 h-24"
                   required
                 />
               </div>
@@ -174,7 +250,7 @@ export default function ClientProfile() {
                     type="text"
                     value={pref || ""}
                     onChange={(e) => handlePreferenceChange(e, index)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 mb-2"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 mb-2"
                     required
                   />
                 ))}
@@ -195,7 +271,7 @@ export default function ClientProfile() {
                       placeholder="Title"
                       value={project.title || ""}
                       onChange={(e) => handleProjectChange(e, index, "title")}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                       required
                     />
                     <input
@@ -203,7 +279,7 @@ export default function ClientProfile() {
                       placeholder="Description"
                       value={project.description || ""}
                       onChange={(e) => handleProjectChange(e, index, "description")}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                       required
                     />
                     <input
@@ -211,7 +287,7 @@ export default function ClientProfile() {
                       placeholder="Budget"
                       value={project.budget || ""}
                       onChange={(e) => handleProjectChange(e, index, "budget")}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
                       required
                     />
                   </div>
@@ -224,45 +300,37 @@ export default function ClientProfile() {
                   Add Project
                 </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Profile Picture URL</label>
-                <input
-                  type="text"
-                  name="profilePicture"
-                  value={editedProfile.profilePicture || ""}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
               <button
                 type="submit"
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+                className="bg-teal-600 text-white px-6 py-2 rounded-md hover:bg-teal-700 transition"
               >
                 Save Changes
               </button>
             </form>
           ) : (
             <div className="space-y-6">
-              <div className="flex items-center space-x-6">
-                <img
-                  src={profile.profilePicture || "https://via.placeholder.com/150"}
-                  alt="Profile"
-                  className="w-36 h-36 rounded-full object-cover border-4 border-blue-500"
-                />
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{profile.name}</h2>
-                  <p className="text-lg text-gray-600">{profile.company}</p>
-                </div>
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900">{profile.name || "Unnamed Client"}</h2>
+                <p className="text-gray-700"><strong>Company:</strong> {profile.company || "N/A"}</p>
+                <p className="text-gray-700">
+                  <strong>Rating:</strong> {profile.rating ? profile.rating.toFixed(1) : "0.0"}/5
+                </p>
               </div>
               <p className="text-gray-700"><strong>Bio:</strong> {profile.bio || "No bio available"}</p>
-              <p className="text-gray-700"><strong>Preferences:</strong> {profile.preferences.join(", ") || "None"}</p>
+              <p className="text-gray-700">
+                <strong>Preferences:</strong>{" "}
+                {Array.isArray(profile.preferences) && profile.preferences.length > 0
+                  ? profile.preferences.join(", ")
+                  : "None"}
+              </p>
               <div>
                 <p className="text-gray-700 font-medium">Past Projects</p>
-                {profile.pastProjects.length > 0 ? (
+                {Array.isArray(profile.pastProjects) && profile.pastProjects.length > 0 ? (
                   <ul className="list-disc pl-5 mt-2 space-y-2">
                     {profile.pastProjects.map((project, index) => (
                       <li key={index} className="text-gray-600">
-                        <strong>{project.title}</strong>: {project.description} (Budget: {project.budget})
+                        <strong>{project.title || "Untitled"}</strong>: {project.description || "No description"} (Budget:{" "}
+                        {project.budget || "N/A"})
                       </li>
                     ))}
                   </ul>
@@ -271,17 +339,20 @@ export default function ClientProfile() {
                 )}
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <p className="text-gray-700"><strong>Total Spent:</strong> {profile.totalSpent} POL</p>
-                <p className="text-gray-700"><strong>Rating:</strong> {profile.rating.toFixed(1)}/5</p>
+                <p className="text-gray-700"><strong>Total Spent:</strong> {profile.totalSpent || 0} POL</p>
+                <p className="text-gray-700">
+                  <strong>Rating:</strong> {profile.rating ? profile.rating.toFixed(1) : "0.0"}/5
+                </p>
               </div>
               <p className="text-gray-700"><strong>Wallet:</strong> {formatString(account)}</p>
               <div>
                 <p className="text-gray-700 font-medium">Reviews Given</p>
-                {profile.reviewsGiven.length > 0 ? (
+                {Array.isArray(profile.reviewsGiven) && profile.reviewsGiven.length > 0 ? (
                   <ul className="list-disc pl-5 mt-2 space-y-2">
                     {profile.reviewsGiven.map((review, index) => (
                       <li key={index} className="text-gray-600">
-                        {review.comment} (Rating: {review.rating}/5 for {review.freelancer})
+                        {review.comment || "No comment"} (Rating: {review.rating || 0}/5 for{" "}
+                        {review.freelancer || "Unknown"})
                       </li>
                     ))}
                   </ul>
@@ -292,7 +363,9 @@ export default function ClientProfile() {
             </div>
           )}
         </motion.div>
-      </div>
-    </Layout>
+      </main>
+
+      <ClientFooter />
+    </div>
   );
 }

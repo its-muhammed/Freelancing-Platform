@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from "react";
 import axios from "axios";
 import { Web3Context } from "../context/Web3Context";
-import Layout from "../components/Layout";
+import { useNavigate } from "react-router-dom";
 
 export default function AvailableTasks() {
   const web3Context = useContext(Web3Context);
@@ -13,6 +13,8 @@ export default function AvailableTasks() {
   const [bidTask, setBidTask] = useState(null);
   const [bidAmount, setBidAmount] = useState("");
   const [bidMessage, setBidMessage] = useState("");
+  const [selectedClient, setSelectedClient] = useState(null); // New state for client profile modal
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchTasks() {
@@ -108,18 +110,75 @@ export default function AvailableTasks() {
     }
   };
 
-  const formatString = (str) => {
-    return str && typeof str === "string" ? `${str.slice(0, 6)}...${str.slice(-4)}` : "Not available";
+  const fetchClientProfile = async (clientId) => {
+    try {
+      const response = await axios.get(`http://localhost:5000/api/profiles/clients/${clientId}`);
+      setSelectedClient(response.data || {});
+    } catch (err) {
+      setError("Failed to fetch client profile: " + err.message);
+      setSelectedClient(null);
+    }
   };
 
-  return (
-    <Layout userType="freelancer">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <header className="bg-gradient-to-r from-indigo-500 to-indigo-700 text-white p-6 rounded-lg mb-6 shadow-md">
-          <div className="flex justify-between items-center">
-            <h2 className="text-3xl font-bold">Available Tasks</h2>
+  const formatString = (str) =>
+    str && typeof str === "string" ? `${str.slice(0, 6)}...${str.slice(-4)}` : "Not available";
+
+  // FreelancerNavbar Component
+  function FreelancerNavbar() {
+    const formatAccount = (acc) =>
+      acc && typeof acc === "string" ? `${acc.slice(0, 6)}...${acc.slice(-4)}` : "Not connected";
+
+    return (
+      <nav className="bg-slate-800 text-white p-4 shadow-md">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold tracking-tight">Freelancer Portal</h1>
+          <div className="flex items-center space-x-6">
+            <span className="text-sm text-gray-300">{formatAccount(account)}</span>
+            <button
+              onClick={() => navigate("/freelancer-dashboard")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => navigate("/available-tasks")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Available Tasks
+            </button>
+            <button
+              onClick={() => navigate("/ongoing-tasks")}
+              className="px-4 py-2 rounded-md bg-teal-600 hover:bg-teal-700 transition"
+            >
+              Ongoing Tasks
+            </button>
+            <button
+              onClick={() => navigate("/")}
+              className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 transition"
+            >
+              Logout
+            </button>
           </div>
-        </header>
+        </div>
+      </nav>
+    );
+  }
+
+  // FreelancerFooter Component
+  function FreelancerFooter() {
+    return (
+      <footer className="bg-slate-800 text-white p-4 text-center">
+        <p className="text-sm">© 2025 Freelancer Portal. Built for Freelancers, by Freelancers.</p>
+      </footer>
+    );
+  }
+
+  return (
+    <div className="bg-white">
+      <FreelancerNavbar />
+
+      <main className="max-w-7xl mx-auto px-4 py-8 min-h-screen bg-gray-100">
+        <h2 className="text-3xl font-bold text-gray-900 mb-8">Available Tasks</h2>
 
         {!account ? (
           <div className="text-center bg-white p-6 rounded-lg shadow-md">
@@ -129,7 +188,7 @@ export default function AvailableTasks() {
             <button
               onClick={handleConnectWallet}
               disabled={isLoading}
-              className={`bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition ${
+              className={`bg-teal-600 text-white px-6 py-2 rounded-md hover:bg-teal-700 transition ${
                 isLoading ? "opacity-50 cursor-not-allowed" : ""
               }`}
             >
@@ -139,7 +198,7 @@ export default function AvailableTasks() {
         ) : isLoading ? (
           <div className="text-center">
             <p className="text-gray-600">Loading tasks...</p>
-            <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mt-4"></div>
+            <div className="animate-spin h-8 w-8 border-4 border-teal-600 border-t-transparent rounded-full mx-auto mt-4"></div>
           </div>
         ) : error ? (
           <p className="text-center text-red-600 bg-red-50 p-4 rounded-lg">{error}</p>
@@ -158,20 +217,29 @@ export default function AvailableTasks() {
               >
                 <h3 className="text-lg font-semibold text-gray-900">{task.title}</h3>
                 <p className="text-gray-700 mt-2 line-clamp-3">{task.description}</p>
-                <p className="text-indigo-600 font-semibold mt-2">Budget: LKR {task.budget}</p>
+                <p className="text-teal-600 font-semibold mt-2">Budget: LKR {task.budget}</p>
                 <p className="text-gray-500 mt-2">
                   Deadline: {new Date(task.deadline).toDateString()}
                 </p>
                 <p className="text-gray-500 mt-2">
                   Client: {formatString(task.clientId)}
                 </p>
-                <button
-                  onClick={() => setBidTask(task)}
-                  className="mt-4 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition w-full"
-                  disabled={isLoading || !account}
-                >
-                  Place Bid
-                </button>
+                <div className="mt-4 space-y-3">
+                  <button
+                    onClick={() => fetchClientProfile(task.clientId)}
+                    className="w-full bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition"
+                    disabled={isLoading || !account}
+                  >
+                    View Client Profile
+                  </button>
+                  <button
+                    onClick={() => setBidTask(task)}
+                    className="w-full bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition"
+                    disabled={isLoading || !account}
+                  >
+                    Place Bid
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -196,7 +264,7 @@ export default function AvailableTasks() {
                     type="number"
                     value={bidAmount}
                     onChange={(e) => setBidAmount(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
                     placeholder="Enter your bid amount"
                   />
                 </div>
@@ -211,7 +279,7 @@ export default function AvailableTasks() {
                     id="bid-message"
                     value={bidMessage}
                     onChange={(e) => setBidMessage(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 h-24 resize-none"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 h-24 resize-none"
                     placeholder="Enter a message for the client"
                   />
                 </div>
@@ -225,7 +293,7 @@ export default function AvailableTasks() {
                 </button>
                 <button
                   onClick={() => handleBidSubmit(bidTask._id)}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition"
+                  className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition"
                   disabled={isLoading || !account}
                 >
                   {isLoading ? "Submitting..." : "Submit Bid"}
@@ -234,7 +302,36 @@ export default function AvailableTasks() {
             </div>
           </div>
         )}
-      </div>
-    </Layout>
+
+        {selectedClient && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Client Profile</h3>
+              <div className="space-y-4">
+                <p><strong>Name:</strong> {selectedClient.name || "Unnamed Client"}</p>
+                <p><strong>Rating:</strong> {selectedClient.rating ? selectedClient.rating.toFixed(1) : "0.0"}/5</p>
+                <p><strong>Bio:</strong> {selectedClient.bio || "No bio available"}</p>
+                <p>
+                  <strong>Skills/Interests:</strong>{" "}
+                  {Array.isArray(selectedClient.skills) && selectedClient.skills.length > 0
+                    ? selectedClient.skills.join(", ")
+                    : "None listed"}
+                </p>
+                <p><strong>Posted Tasks:</strong> {selectedClient.postedTasks || 0}</p>
+                <p><strong>Completed Tasks:</strong> {selectedClient.completedTasks || 0}</p>
+              </div>
+              <button
+                onClick={() => setSelectedClient(null)}
+                className="mt-6 bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </main>
+
+      <FreelancerFooter />
+    </div>
   );
 }
